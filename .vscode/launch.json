@@ -1,0 +1,122 @@
+{
+    // 使用 IntelliSense 了解相关属性。 
+    // 悬停以查看现有属性的描述。
+    // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'hclua-src'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=hclua-src"
+                ],
+                "filter": {
+                    "name": "hclua-src",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'hclua'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=hclua"
+                ],
+                "filter": {
+                    "name": "hclua",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug example 'speed'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--example=speed",
+                    "--package=hclua"
+                ],
+                "filter": {
+                    "name": "speed",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in example 'speed'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--example=speed",
+                    "--package=hclua"
+                ],
+                "filter": {
+                    "name": "speed",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug example 'object'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--example=object",
+                    "--package=hclua",
+                    "--features=lua53"
+                ],
+                "filter": {
+                    "name": "object",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in example 'object'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--example=object",
+                    "--package=hclua",
+                    "--features=luajit"
+                ],
+                "filter": {
+                    "name": "object",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}

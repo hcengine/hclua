@@ -1,0 +1,25 @@
+[package]
+name = "hclua-src"
+version = "0.1.1"
+edition = "2021"
+authors = [ "hpnlic <hpnlic@hotmail.com>" ]
+description = "hclua"
+repository = "https://github.com/hcengine/hclua"
+license = "Apache-2.0"
+build = "build.rs"
+keywords = ["hclua", "lua54", "lua51", "luajit"]
+categories = ["external-ffi-bindings"]
+links = "lua"
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[build-dependencies]
+cc = "1.1.30"
+which = "6.0"
+
+[features]
+lua54=[]
+lua53=[]
+lua52=[]
+lua51=[]
+luajit=[]
+luajit52=[]

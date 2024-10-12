@@ -1,0 +1,26 @@
+[package]
+name = "hclua"
+version = "0.1.2"
+edition = "2021"
+authors = [ "hpnlic <hpnlic@hotmail.com>" ]
+description = "hclua"
+repository = "https://github.com/hcengine/hclua"
+license = "Apache-2.0"
+keywords = ["hclua", "lua54", "lua51", "luajit"]
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+
+[dependencies]
+libc = "0.2.159"
+ffi = { package = "hclua-src", version = "0.1.1", path = "hclua-src" }
+
+[workspace]
+members = ["hclua-src"]
+
+[features]
+lua54=["ffi/lua54"]
+lua53=["ffi/lua53"]
+lua52=["ffi/lua52"]
+lua51=["ffi/lua51"]
+luajit=["ffi/luajit"]
+luajit52=["luajit", "ffi/luajit52"]
