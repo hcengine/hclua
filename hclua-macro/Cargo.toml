@@ -1,0 +1,24 @@
+[package]
+name = "hclua-macro"
+version = "0.1.1"
+edition = "2021"
+authors = [ "hpnlic <hpnlic@hotmail.com>" ]
+description = "hclua macro"
+repository = "https://github.com/hcengine/hclua"
+license = "Apache-2.0"
+keywords = []
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+quote = "1.0.36"
+lazy_static = "1.2.0"
+proc-macro2 = "1.0.86"
+quote-use = "0.8.4"
+
+[dependencies.syn]
+version = "2.0.74"
+features = ["full", "extra-traits"]
+
+[lib]
+proc-macro = true

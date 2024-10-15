@@ -1,7 +1,15 @@
-use std::{any::{Any, TypeId}, ffi::CString, marker::PhantomData, mem, ptr};
 use libc::c_char;
+use std::{
+    any::{Any, TypeId},
+    ffi::CString,
+    marker::PhantomData,
+    mem, ptr,
+};
 
-use crate::{lua_State, lua_call, lua_getfield, lua_pop, lua_pushvalue, push_lightuserdata, sys, Lua, LuaPush, LuaRead, LuaTable};
+use crate::{
+    lua_State, lua_call, lua_getfield, lua_pop, lua_pushvalue, push_lightuserdata, sys, Lua,
+    LuaPush, LuaRead, LuaTable,
+};
 
 // Called when an object inside Lua is being dropped.
 #[inline]
@@ -18,8 +26,7 @@ where
     T: Default + Any,
 {
     let t = T::default();
-    let lua_data_raw =
-        unsafe { sys::lua_newuserdata(lua, mem::size_of::<T>() as libc::size_t) };
+    let lua_data_raw = unsafe { sys::lua_newuserdata(lua, mem::size_of::<T>() as libc::size_t) };
     unsafe {
         ptr::write(lua_data_raw as *mut _, t);
     }
@@ -119,8 +126,10 @@ where
 }
 
 pub struct LuaObject<'a, T>
-where T: Default + Any,
-    &'a mut T: LuaRead {
+where
+    T: Default + Any,
+    &'a mut T: LuaRead,
+{
     lua: *mut lua_State,
     light: bool,
     name: &'static str,
@@ -130,8 +139,11 @@ where T: Default + Any,
 impl<'a, T> LuaObject<'a, T>
 where
     T: Default + Any,
-    &'a mut T: LuaRead 
+    &'a mut T: LuaRead,
 {
+    pub fn test() {
+        println!("aaa");
+    }
     pub fn new(lua: *mut lua_State, name: &'static str) -> LuaObject<'a, T> {
         LuaObject {
             lua,
@@ -154,9 +166,7 @@ where
         let typeid = get_metatable_base_key::<T>();
         let mut lua = Lua::from_existing_state(self.lua, false);
         match lua.queryc::<LuaTable>(&typeid) {
-            Some(_) => {
-                true
-            }
+            Some(_) => true,
             None => unsafe {
                 sys::lua_newtable(self.lua);
                 // index "__name" corresponds to the hash of the TypeId of T
@@ -183,7 +193,7 @@ where
                 sys::lua_rawset(self.lua, -3);
 
                 sys::lua_setglobal(self.lua, typeid.as_ptr() as *const c_char);
-                
+
                 let typeid = get_metatable_real_key::<T>();
                 sys::lua_newtable(self.lua);
                 sys::lua_setglobal(self.lua, typeid.as_ptr());
@@ -195,7 +205,6 @@ where
     pub fn create(&mut self) -> &mut LuaObject<'a, T> {
         self.ensure_matetable();
         unsafe {
-
             let name = CString::new(self.name).unwrap();
             if self.light {
                 sys::lua_pushcfunction(self.lua, constructor_light_wrapper::<T>);
@@ -207,38 +216,52 @@ where
         self
     }
 
-    pub fn add_method_get<P>(&mut self, name: &str, param: P) -> &mut LuaObject<'a, T>
+    pub fn add_object_method_get<P>(lua: &mut Lua, name: &str, param: P)
     where
         P: LuaPush,
     {
         let typeid = get_metatable_real_key::<T>();
-        let mut lua = Lua::from_existing_state(self.lua, false);
         match lua.queryc::<LuaTable>(&typeid) {
             Some(mut table) => {
                 table.set(name, param);
             }
             None => (),
         };
+    }
+
+    pub fn add_method_get<P>(&mut self, name: &str, param: P) -> &mut LuaObject<'a, T>
+    where
+        P: LuaPush,
+    {
+        let mut lua = Lua::from_existing_state(self.lua, false);
+        Self::add_object_method_get(&mut lua, name, param);
         self
     }
 
-    pub fn add_method_set<P>(&mut self, name: &str, param: P) -> &mut LuaObject<'a, T>
+    
+    pub fn add_object_method_set<P>(lua: &mut Lua, name: &str, param: P)
     where
         P: LuaPush,
     {
         let typeid = get_metatable_real_key::<T>();
-        let mut lua = Lua::from_existing_state(self.lua, false);
         match lua.queryc::<LuaTable>(&typeid) {
             Some(mut table) => {
                 table.set(check_set_field_key(name), param);
             }
             None => (),
         };
+    }
+
+    pub fn add_method_set<P>(&mut self, name: &str, param: P) -> &mut LuaObject<'a, T>
+    where
+        P: LuaPush,
+    {
+        let mut lua = Lua::from_existing_state(self.lua, false);
+        Self::add_object_method_set(&mut lua, name, param);
         self
     }
 
-    pub fn mark_field(&mut self, name: &str) -> &mut LuaObject<'a, T>
-    {
+    pub fn mark_field(&mut self, name: &str) -> &mut LuaObject<'a, T> {
         let typeid = get_metatable_real_key::<T>();
         let mut lua = Lua::from_existing_state(self.lua, false);
         match lua.queryc::<LuaTable>(&typeid) {
@@ -254,15 +277,22 @@ where
     where
         P: LuaPush,
     {
-        let typeid = get_metatable_real_key::<T>();
         let mut lua = Lua::from_existing_state(self.lua, false);
+        Self::object_def(&mut lua, name, param);
+        self
+    }
+    
+    pub fn object_def<P>(lua: &mut Lua, name: &str, param: P)
+    where
+        P: LuaPush,
+    {
+        let typeid = get_metatable_real_key::<T>();
         match lua.queryc::<LuaTable>(&typeid) {
             Some(mut table) => {
                 table.set(name, param);
             }
             None => (),
         };
-        self
     }
 
     pub fn register(
@@ -285,8 +315,20 @@ where
 #[macro_export]
 macro_rules! add_object_field {
     ($userdata: expr, $name: ident, $t: ty, $field_type: ty) => {
-        $userdata.add_method_get(&format!("{}", stringify!($name)), hclua::function1(|obj: &mut $t| -> &$field_type { println!("aaaa"); &obj.$name }) );
-        $userdata.add_method_set(stringify!($name), hclua::function2(|obj: &mut $t, val: $field_type| { println!("bbbb {}", val); obj.$name = val; }));
+        $userdata.add_method_get(
+            &format!("{}", stringify!($name)),
+            hclua::function1(|obj: &mut $t| -> &$field_type {
+                println!("aaaa");
+                &obj.$name
+            }),
+        );
+        $userdata.add_method_set(
+            stringify!($name),
+            hclua::function2(|obj: &mut $t, val: $field_type| {
+                println!("bbbb {}", val);
+                obj.$name = val;
+            }),
+        );
         $userdata.mark_field(stringify!($name));
     };
 }
@@ -295,17 +337,23 @@ macro_rules! add_object_field {
 macro_rules! object_impl {
     ($t: ty) => {
         impl<'a> LuaRead for &'a mut $t {
-            fn lua_read_with_pop_impl(lua: *mut lua_State, index: i32, _pop: i32) -> Option<&'a mut $t> {
+            fn lua_read_with_pop_impl(
+                lua: *mut lua_State,
+                index: i32,
+                _pop: i32,
+            ) -> Option<&'a mut $t> {
                 hclua::userdata::read_userdata(lua, index)
             }
         }
-        
+
         impl LuaPush for $t {
             fn push_to_lua(self, lua: *mut lua_State) -> i32 {
                 unsafe {
                     let obj = std::boxed::Box::into_raw(std::boxed::Box::new(self));
                     hclua::userdata::push_lightuserdata(&mut *obj, lua, |_| {});
-                    let typeid = std::ffi::CString::new(format!("{:?}", std::any::TypeId::of::<$t>())).unwrap();
+                    let typeid =
+                        std::ffi::CString::new(format!("{:?}", std::any::TypeId::of::<$t>()))
+                            .unwrap();
                     hclua::lua_getglobal(lua, typeid.as_ptr());
                     if hclua::lua_istable(lua, -1) {
                         hclua::lua_setmetatable(lua, -2);

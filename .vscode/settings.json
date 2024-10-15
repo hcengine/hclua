@@ -1,5 +1,5 @@
 {
     "rust-analyzer.cargo.features": [
-        "lua51"
+        "lua52"
     ]
 }

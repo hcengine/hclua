@@ -13,9 +13,10 @@ keywords = ["hclua", "lua54", "lua51", "luajit"]
 [dependencies]
 libc = "0.2.159"
 ffi = { package = "hclua-src", version = "0.1.1", path = "hclua-src" }
+hclua_macro = { package = "hclua-macro", version = "0.1.1", path = "hclua-macro" }
 
 [workspace]
-members = ["hclua-src"]
+members = ["hclua-src", "hclua-macro"]
 
 [features]
 lua54=["ffi/lua54"]
