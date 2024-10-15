@@ -69,6 +69,7 @@ where
             let is_field = t == sys::LUA_TBOOLEAN;
             let key = CString::new(key).unwrap();
             let t = lua_getfield(lua, -1, key.as_ptr());
+            // println!("key = {:?}, t = {}", key.to_str(), t);
             if t != sys::LUA_TFUNCTION || !is_field {
                 return 1;
             }
@@ -262,15 +263,19 @@ where
     }
 
     pub fn mark_field(&mut self, name: &str) -> &mut LuaObject<'a, T> {
-        let typeid = get_metatable_real_key::<T>();
         let mut lua = Lua::from_existing_state(self.lua, false);
+        Self::object_mark_field(&mut lua, name);
+        self
+    }
+
+    pub fn object_mark_field(lua: &mut Lua, name: &str) {
+        let typeid = get_metatable_real_key::<T>();
         match lua.queryc::<LuaTable>(&typeid) {
             Some(mut table) => {
                 table.set(check_is_field_key(name), true);
             }
             None => (),
         };
-        self
     }
 
     pub fn def<P>(&mut self, name: &str, param: P) -> &mut LuaObject<'a, T>

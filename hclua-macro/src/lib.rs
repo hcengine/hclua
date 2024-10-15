@@ -15,12 +15,12 @@ use std::io::Result;
 use syn::parse::Parse;
 use syn::parse::ParseStream;
 use syn::parse_macro_input;
+mod config;
 
-
-#[proc_macro_derive(HelloMacro, attributes(field))]
+#[proc_macro_derive(HelloMacro, attributes(field, hclua_cfg))]
 pub fn hello_macro_derive(input: TokenStream) -> TokenStream {
-    let ItemStruct { ident, fields, .. } = parse_macro_input!(input);
-    
+    let ItemStruct { ident, fields, attrs, .. } = parse_macro_input!(input);
+    let config =  config::Config::parse_from_attributes(ident.to_string(), &attrs[..]).unwrap();
     let functions: Vec<_> = fields.iter().map(|field| {
         let field_ident = field.ident.clone().unwrap();
         if field.attrs.iter().any(|attr| attr.path().is_ident("field")) {
@@ -28,9 +28,9 @@ pub fn hello_macro_derive(input: TokenStream) -> TokenStream {
             let set_name = format_ident!("set_{}", field_ident);
             let ty = field.ty.clone();
             quote!{
-                fn #get_name(&mut self) -> #ty {
+                fn #get_name(&mut self) -> &#ty {
                     println!("aaaa");
-                    self.#field_ident
+                    &self.#field_ident
                 }
 
                 fn #set_name(&mut self, val: #ty) {
@@ -52,14 +52,15 @@ pub fn hello_macro_derive(input: TokenStream) -> TokenStream {
             let get_name = format_ident!("get_{}", field_ident);
             let set_name = format_ident!("set_{}", field_ident);
             quote!{
-                hclua::LuaObject::add_object_method_get(lua, &stringify!(#field_ident), hclua::function1(|obj: &mut field_ident| -> #ty {
+                hclua::LuaObject::add_object_method_get(lua, &stringify!(#field_ident), hclua::function1(|obj: &mut #ident| -> &#ty {
                     &obj.#field_ident
                 }));
-                hclua::LuaObject::add_object_method_set(lua, &stringify!(#field_ident), hclua::function2(|obj: &mut field_ident, val: #ty| {
+                hclua::LuaObject::add_object_method_set(lua, &stringify!(#field_ident), hclua::function2(|obj: &mut #ident, val: #ty| {
                     obj.#field_ident = val;
                 }));
-                hclua::LuaObject::object_def(&stringify!(#get_name), hclua::function1(#ident::#get_name));
-                hclua::LuaObject::object_def(&stringify!(#set_name), hclua::function2(#ident::#set_name));
+                hclua::LuaObject::object_def(lua, &stringify!(#get_name), hclua::function1(#ident::#get_name));
+                hclua::LuaObject::object_def(lua, &stringify!(#set_name), hclua::function2(#ident::#set_name));
+                hclua::LuaObject::object_mark_field(lua, &stringify!(#field_ident));
             }
         } else {
             quote!{}
@@ -80,17 +81,30 @@ pub fn hello_macro_derive(input: TokenStream) -> TokenStream {
     // }).collect();
 
     // println!("functions = {:?}", functions);
+
+    let name = config.name;
+    let is_light = config.light;
     let gen = quote! {
         impl #ident {
             fn hello_macro(&self) {
                 println!("Hello, Macro! My name is {} {}", stringify!(#ident), "a");
             }
 
-            fn register_field() {
+            fn register_field(lua: &mut hclua::Lua) {
                 println!("register");
-                println("aaaaa");
 
                 #(#registers)*
+            }
+
+            fn register(lua: &mut hclua::Lua) {
+                let mut obj = if #is_light {
+                    hclua::LuaObject::<#ident>::new(lua.state(), &#name)
+                } else {
+                    hclua::LuaObject::<#ident>::new(lua.state(), &#name)
+                };
+                obj.create();
+
+                Self::register_field(lua);
             }
 
             #(#functions)*
@@ -99,7 +113,7 @@ pub fn hello_macro_derive(input: TokenStream) -> TokenStream {
 
         impl<'a> hclua::LuaRead for &'a mut #ident {
             fn lua_read_with_pop_impl(
-                lua: *mut lua_State,
+                lua: *mut hclua::lua_State,
                 index: i32,
                 _pop: i32,
             ) -> Option<&'a mut #ident> {
@@ -107,8 +121,8 @@ pub fn hello_macro_derive(input: TokenStream) -> TokenStream {
             }
         }
 
-        impl LuaPush for #ident {
-            fn push_to_lua(self, lua: *mut lua_State) -> i32 {
+        impl hclua::LuaPush for #ident {
+            fn push_to_lua(self, lua: *mut hclua::lua_State) -> i32 {
                 unsafe {
                     let obj = std::boxed::Box::into_raw(std::boxed::Box::new(self));
                     hclua::userdata::push_lightuserdata(&mut *obj, lua, |_| {});
