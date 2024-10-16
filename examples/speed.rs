@@ -36,7 +36,6 @@ macro_rules! test {
 fn main() {
     let mut xx = Xx { kk: String::new(), nn: String::new() };
     test!(xx, kk);
-    println!("kkk = {:?} nn = {:?}", xx.kk, xx.nn);
     let mut lua = hclua::Lua::new();
     lua.openlibs();
     let val = r"
@@ -48,5 +47,4 @@ fn main() {
         print(os.time() - start);
     ";
     let _: Option<()> = lua.exec_string(val);
-    println!("hello");
 }

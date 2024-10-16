@@ -1,15 +1,22 @@
+use lazy_static::lazy_static;
 use libc::c_char;
+use std::collections::HashSet;
 use std::{
     any::{Any, TypeId},
     ffi::CString,
     marker::PhantomData,
     mem, ptr,
+    sync::RwLock,
 };
 
 use crate::{
-    lua_State, lua_call, lua_getfield, lua_pop, lua_pushvalue, push_lightuserdata, sys, Lua,
-    LuaPush, LuaRead, LuaTable,
+    luaL_error, lua_State, lua_call, lua_getfield, lua_gettop, lua_pushvalue, push_lightuserdata,
+    sys, Lua, LuaPush, LuaRead, LuaTable,
 };
+
+lazy_static! {
+    static ref FIELD_CHECK: RwLock<HashSet<(TypeId, &'static str)>> = RwLock::new(HashSet::new());
+}
 
 // Called when an object inside Lua is being dropped.
 #[inline]
@@ -46,11 +53,7 @@ fn get_metatable_real_key<T: Any>() -> CString {
     CString::new(format!("{:?}_real", TypeId::of::<T>())).unwrap()
 }
 
-fn check_is_field_key(name: &str) -> CString {
-    CString::new(format!("{}__isfield", name)).unwrap()
-}
-
-fn check_set_field_key(name: &str) -> CString {
+fn get_set_field_key(name: &str) -> CString {
     CString::new(format!("{}__set", name)).unwrap()
 }
 
@@ -59,19 +62,25 @@ where
     T: Default + Any,
     &'a mut T: LuaRead,
 {
+    unsafe {
+        if lua_gettop(lua) < 2 {
+            let value = CString::new(format!("index field must use 2 top")).unwrap();
+            return luaL_error(lua, value.as_ptr());
+        }
+    }
     if let Some(key) = String::lua_read_with_pop(lua, 2, 0) {
         let typeid = get_metatable_real_key::<T>();
         unsafe {
             sys::lua_getglobal(lua, typeid.as_ptr());
-            let check_key = check_is_field_key(&key);
-            let t = lua_getfield(lua, -1, check_key.as_ptr());
-            lua_pop(lua, 1);
-            let is_field = t == sys::LUA_TBOOLEAN;
+            let is_field = LuaObject::is_field(&*key);
             let key = CString::new(key).unwrap();
             let t = lua_getfield(lua, -1, key.as_ptr());
-            // println!("key = {:?}, t = {}", key.to_str(), t);
-            if t != sys::LUA_TFUNCTION || !is_field {
-                return 1;
+            if !is_field {
+                if t == sys::LUA_TFUNCTION {
+                    return 1;
+                } else {
+                    return 1;
+                }
             }
             lua_pushvalue(lua, 1);
             lua_call(lua, 1, 1);
@@ -87,8 +96,13 @@ where
     T: Default + Any,
     &'a mut T: LuaRead,
 {
-    println!("newindex_metatable!!!!!!!!!!!!!!!!");
     if let Some(mut key) = String::lua_read_with_pop(lua, 2, 0) {
+        if !LuaObject::is_field(&*key) {
+            let value = CString::new(format!("key {key} not a field")).unwrap();
+            unsafe {
+                return luaL_error(lua, value.as_ptr());
+            }
+        }
         key.push_str("__set");
         let typeid = get_metatable_real_key::<T>();
         unsafe {
@@ -142,9 +156,16 @@ where
     T: Default + Any,
     &'a mut T: LuaRead,
 {
-    pub fn test() {
-        println!("aaa");
+    pub fn is_field(name: &str) -> bool {
+        let val = FIELD_CHECK.read().unwrap();
+        val.contains(&(TypeId::of::<T>(), name))
     }
+
+    pub fn set_field(name: &'static str) {
+        let mut val = FIELD_CHECK.write().unwrap();
+        val.insert((TypeId::of::<T>(), name));
+    }
+
     pub fn new(lua: *mut lua_State, name: &'static str) -> LuaObject<'a, T> {
         LuaObject {
             lua,
@@ -239,7 +260,6 @@ where
         self
     }
 
-    
     pub fn add_object_method_set<P>(lua: &mut Lua, name: &str, param: P)
     where
         P: LuaPush,
@@ -247,7 +267,7 @@ where
         let typeid = get_metatable_real_key::<T>();
         match lua.queryc::<LuaTable>(&typeid) {
             Some(mut table) => {
-                table.set(check_set_field_key(name), param);
+                table.set(get_set_field_key(name), param);
             }
             None => (),
         };
@@ -262,20 +282,9 @@ where
         self
     }
 
-    pub fn mark_field(&mut self, name: &str) -> &mut LuaObject<'a, T> {
-        let mut lua = Lua::from_existing_state(self.lua, false);
-        Self::object_mark_field(&mut lua, name);
+    pub fn mark_field(&mut self, name: &'static str) -> &mut LuaObject<'a, T> {
+        Self::set_field(name);
         self
-    }
-
-    pub fn object_mark_field(lua: &mut Lua, name: &str) {
-        let typeid = get_metatable_real_key::<T>();
-        match lua.queryc::<LuaTable>(&typeid) {
-            Some(mut table) => {
-                table.set(check_is_field_key(name), true);
-            }
-            None => (),
-        };
     }
 
     pub fn def<P>(&mut self, name: &str, param: P) -> &mut LuaObject<'a, T>
@@ -286,7 +295,7 @@ where
         Self::object_def(&mut lua, name, param);
         self
     }
-    
+
     pub fn object_def<P>(lua: &mut Lua, name: &str, param: P)
     where
         P: LuaPush,
@@ -322,15 +331,11 @@ macro_rules! add_object_field {
     ($userdata: expr, $name: ident, $t: ty, $field_type: ty) => {
         $userdata.add_method_get(
             &format!("{}", stringify!($name)),
-            hclua::function1(|obj: &mut $t| -> &$field_type {
-                println!("aaaa");
-                &obj.$name
-            }),
+            hclua::function1(|obj: &mut $t| -> &$field_type { &obj.$name }),
         );
         $userdata.add_method_set(
             stringify!($name),
             hclua::function2(|obj: &mut $t, val: $field_type| {
-                println!("bbbb {}", val);
                 obj.$name = val;
             }),
         );

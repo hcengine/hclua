@@ -35,10 +35,11 @@ dependencies = [
 
 [[package]]
 name = "hclua"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "hclua-macro",
  "hclua-src",
+ "lazy_static",
  "libc",
 ]
 

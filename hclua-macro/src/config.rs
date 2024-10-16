@@ -47,8 +47,6 @@ impl Config {
             }
         }
 
-        println!("Config name == {:?}", config.name);
-
         Ok(config)
     }
 }
@@ -68,7 +66,6 @@ impl Parse for ConfigAttrib {
         let content;
         let _paren = parenthesized!(content in input);
         let name = content.parse::<syn::Ident>()?;
-        println!("name === {}", name);
         match &name.to_string()[..] {
             "light" => Ok(ConfigAttrib::Light),
             _ => Ok(ConfigAttrib::Name(name.to_string())),

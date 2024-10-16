@@ -1,3 +1,4 @@
+
 use hclua_macro::HelloMacro;
 
 #[derive(HelloMacro, Default)]
@@ -6,7 +7,6 @@ use hclua_macro::HelloMacro;
 struct Xx {
     #[field]
     field: u32,
-    fieldxx: u32,
     #[field]
     aabbfieldxx11: u32,
     #[field]
@@ -19,11 +19,11 @@ impl Xx {
     }
 }
 
+
 fn main() {
     let mut lua = hclua::Lua::new();
     let mut xx = Xx::default();
     xx.kk = "ok".to_string();
-    xx.hello_macro();
     xx.ok();
 
     Xx::register(&mut lua);
@@ -40,9 +40,15 @@ fn main() {
         local v = CCCC();
         print(\"xxx\", v:xxx())
         print(\"kkkk\", v.kk)
+        v.kk = \"dddsss\";
+        print(\"kkkk ok get_kk\", v:get_kk())
         v.kk = \"aa\";
         print(\"new kkkkk\", v.kk)
+        v:set_kk(\"dddddd\");
+        print(\"new kkkkk1\", v.kk)
+        print(\"attemp\", v.kk1)
         print(\"vvvvv\", v:xxx())
+        print(\"kkkk get_kk\", v.get_kk())
     ";
 
     let _: Option<()> = lua.exec_string(val);

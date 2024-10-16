@@ -1,6 +1,6 @@
 [package]
 name = "hclua"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
 authors = [ "hpnlic <hpnlic@hotmail.com>" ]
 description = "hclua"
@@ -12,6 +12,8 @@ keywords = ["hclua", "lua54", "lua51", "luajit"]
 
 [dependencies]
 libc = "0.2.159"
+lazy_static = "1.5.0"
+
 ffi = { package = "hclua-src", version = "0.1.1", path = "hclua-src" }
 hclua_macro = { package = "hclua-macro", version = "0.1.1", path = "hclua-macro" }
 
