@@ -2,7 +2,7 @@ use std::default::Default;
 
 use quote::ToTokens;
 use syn::parse::{Parse, ParseStream};
-use syn::{self, parenthesized};
+use syn::{self, parenthesized, Token};
 
 pub struct Config {
     pub name: String,
@@ -68,7 +68,14 @@ impl Parse for ConfigAttrib {
         let name = content.parse::<syn::Ident>()?;
         match &name.to_string()[..] {
             "light" => Ok(ConfigAttrib::Light),
-            _ => Ok(ConfigAttrib::Name(name.to_string())),
+            "name" => {
+                content.parse::<Token![=]>()?;
+                let obj_name = content.parse::<syn::Ident>()?;
+                Ok(ConfigAttrib::Name(obj_name.to_string()))
+            },
+            _ => Err(syn::parse::Error::new(
+                name.span(), format!("unrecognized config option '{}'", name.to_string())
+            ))
         }
     }
 }

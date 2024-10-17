@@ -5,8 +5,8 @@ use syn::{self, ItemStruct};
 use syn::parse_macro_input;
 mod config;
 
-#[proc_macro_derive(HelloMacro, attributes(field, hclua_cfg))]
-pub fn hello_macro_derive(input: TokenStream) -> TokenStream {
+#[proc_macro_derive(ObjectMacro, attributes(hclua_field, hclua_cfg))]
+pub fn object_macro_derive(input: TokenStream) -> TokenStream {
     let ItemStruct {
         ident,
         fields,
@@ -18,7 +18,7 @@ pub fn hello_macro_derive(input: TokenStream) -> TokenStream {
         .iter()
         .map(|field| {
             let field_ident = field.ident.clone().unwrap();
-            if field.attrs.iter().any(|attr| attr.path().is_ident("field")) {
+            if field.attrs.iter().any(|attr| attr.path().is_ident("hclua_field")) {
                 let get_name = format_ident!("get_{}", field_ident);
                 let set_name = format_ident!("set_{}", field_ident);
                 let ty = field.ty.clone();
@@ -39,7 +39,7 @@ pub fn hello_macro_derive(input: TokenStream) -> TokenStream {
 
     let registers: Vec<_> = fields.iter().map(|field| {
         let field_ident = field.ident.clone().unwrap();
-        if field.attrs.iter().any(|attr| attr.path().is_ident("field")) {
+        if field.attrs.iter().any(|attr| attr.path().is_ident("hclua_field")) {
             let ty = field.ty.clone();
             let get_name = format_ident!("get_{}", field_ident);
             let set_name = format_ident!("set_{}", field_ident);
@@ -78,6 +78,13 @@ pub fn hello_macro_derive(input: TokenStream) -> TokenStream {
                 Self::register_field(lua);
             }
 
+            fn object_def<P>(lua: &mut hclua::Lua, name: &str, param: P)
+            where
+                P: hclua::LuaPush,
+            {
+                hclua::LuaObject::<#ident>::object_def(lua, name, param);
+            }
+
             #(#functions)*
         }
 
@@ -111,10 +118,4 @@ pub fn hello_macro_derive(input: TokenStream) -> TokenStream {
         }
     };
     gen.into()
-    // 构建 Rust 代码所代表的语法树
-    // 以便可以进行操作
-    // let ast = syn::parse(input).unwrap();
-
-    // // 构建 trait 实现
-    // impl_hello_macro(&ast)
 }

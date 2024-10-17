@@ -1,19 +1,19 @@
 
-use hclua_macro::HelloMacro;
+use hclua_macro::ObjectMacro;
 
-#[derive(HelloMacro, Default)]
-#[hclua_cfg(CCCC)]
+#[derive(ObjectMacro, Default)]
+#[hclua_cfg(name = CCCC)]
 #[hclua_cfg(light)]
-struct Xx {
-    #[field]
+struct TestMacro {
+    #[hclua_field]
     field: u32,
-    #[field]
+    #[hclua_field]
     aabbfieldxx11: u32,
-    #[field]
+    #[hclua_field]
     kk: String,
 }
 
-impl Xx {
+impl TestMacro {
     fn ok(&self) {
         println!("ok!!!!");
     }
@@ -22,12 +22,12 @@ impl Xx {
 
 fn main() {
     let mut lua = hclua::Lua::new();
-    let mut xx = Xx::default();
+    let mut xx = TestMacro::default();
     xx.kk = "ok".to_string();
     xx.ok();
 
-    Xx::register(&mut lua);
-    hclua::LuaObject::<Xx>::object_def(&mut lua, "xxx", hclua::function1(|obj: &mut Xx| -> u32 {
+    TestMacro::register(&mut lua);
+    TestMacro::object_def(&mut lua, "xxx", hclua::function1(|obj: &mut TestMacro| -> u32 {
         obj.field
     }));
     lua.openlibs();
