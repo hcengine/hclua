@@ -2,18 +2,16 @@
 use hclua_macro::ObjectMacro;
 
 #[derive(ObjectMacro, Default)]
-#[hclua_cfg(name = CCCC)]
+#[hclua_cfg(name = HcTest)]
 #[hclua_cfg(light)]
-struct TestMacro {
+struct HcTestMacro {
     #[hclua_field]
     field: u32,
     #[hclua_field]
-    aabbfieldxx11: u32,
-    #[hclua_field]
-    kk: String,
+    hc: String,
 }
 
-impl TestMacro {
+impl HcTestMacro {
     fn ok(&self) {
         println!("ok!!!!");
     }
@@ -22,34 +20,38 @@ impl TestMacro {
 
 fn main() {
     let mut lua = hclua::Lua::new();
-    let mut xx = TestMacro::default();
-    xx.kk = "ok".to_string();
-    xx.ok();
-
-    TestMacro::register(&mut lua);
-    TestMacro::object_def(&mut lua, "xxx", hclua::function1(|obj: &mut TestMacro| -> u32 {
+    HcTestMacro::register(&mut lua);
+    // 直接注册函数注册
+    HcTestMacro::object_def(&mut lua, "ok", hclua::function1(HcTestMacro::ok));
+    // 闭包注册单参数
+    HcTestMacro::object_def(&mut lua, "call1", hclua::function1(|obj: &HcTestMacro| -> u32 {
         obj.field
     }));
+    // 闭包注册双参数
+    HcTestMacro::object_def(&mut lua, "call2", hclua::function2(|obj: &mut HcTestMacro, val: u32| -> u32 {
+        obj.field + val
+    }));
+    HcTestMacro::object_static_def(&mut lua, "sta_run", hclua::function0(|| -> String {
+        "test".to_string()
+    }));
     lua.openlibs();
-
     
     let val = "
-        print(aaa);
-        print(\"cccxxxxxxxxxxxxxxx\");
-        print(type(CCCC));
-        local v = CCCC();
-        print(\"xxx\", v:xxx())
-        print(\"kkkk\", v.kk)
-        v.kk = \"dddsss\";
-        print(\"kkkk ok get_kk\", v:get_kk())
-        v.kk = \"aa\";
-        print(\"new kkkkk\", v.kk)
-        v:set_kk(\"dddddd\");
-        print(\"new kkkkk1\", v.kk)
-        print(\"attemp\", v.kk1)
-        print(\"vvvvv\", v:xxx())
-        print(\"kkkk get_kk\", v.get_kk())
+        print(type(HcTest));
+        local v = HcTest.new();
+        print(\"call ok\", v:ok())
+        print(\"call1\", v:call1())
+        print(\"call2\", v:call2(2))
+        print(\"kkkk\", v.hc)
+        v.hc = \"dddsss\";
+        print(\"kkkk ok get_hc\", v:get_hc())
+        v.hc = \"aa\";
+        print(\"new kkkkk\", v.hc)
+        v:set_hc(\"dddddd\");
+        print(\"new kkkkk1\", v.hc)
+        print(\"attemp\", v.hc1)
+        print(\"static run\", HcTest.sta_run())
+        HcTest.del(v);
     ";
-
     let _: Option<()> = lua.exec_string(val);
 }

@@ -10,134 +10,12 @@ use std::{
 };
 
 use crate::{
-    luaL_error, lua_State, lua_call, lua_getfield, lua_gettop, lua_pushvalue, push_lightuserdata,
-    sys, Lua, LuaPush, LuaRead, LuaTable,
+    luaL_error, lua_State, lua_call, lua_error, lua_getfield, lua_gettop, lua_pushvalue,
+    push_lightuserdata, sys, Lua, LuaPush, LuaRead, LuaTable,
 };
 
 lazy_static! {
     static ref FIELD_CHECK: RwLock<HashSet<(TypeId, &'static str)>> = RwLock::new(HashSet::new());
-}
-
-// Called when an object inside Lua is being dropped.
-#[inline]
-extern "C" fn destructor_wrapper<T>(lua: *mut sys::lua_State) -> libc::c_int {
-    unsafe {
-        let obj = sys::lua_touserdata(lua, -1);
-        ptr::drop_in_place(obj as *mut T);
-        0
-    }
-}
-
-extern "C" fn constructor_wrapper<T>(lua: *mut sys::lua_State) -> libc::c_int
-where
-    T: Default + Any,
-{
-    let t = T::default();
-    let lua_data_raw = unsafe { sys::lua_newuserdata(lua, mem::size_of::<T>() as libc::size_t) };
-    unsafe {
-        ptr::write(lua_data_raw as *mut _, t);
-    }
-    let typeid = CString::new(format!("{:?}", TypeId::of::<T>())).unwrap();
-    unsafe {
-        sys::lua_getglobal(lua, typeid.as_ptr());
-        sys::lua_setmetatable(lua, -2);
-    }
-    1
-}
-
-fn get_metatable_base_key<T: Any>() -> CString {
-    CString::new(format!("{:?}", TypeId::of::<T>())).unwrap()
-}
-
-fn get_metatable_real_key<T: Any>() -> CString {
-    CString::new(format!("{:?}_real", TypeId::of::<T>())).unwrap()
-}
-
-fn get_set_field_key(name: &str) -> CString {
-    CString::new(format!("{}__set", name)).unwrap()
-}
-
-extern "C" fn index_metatable<'a, T>(lua: *mut sys::lua_State) -> libc::c_int
-where
-    T: Default + Any,
-    &'a mut T: LuaRead,
-{
-    unsafe {
-        if lua_gettop(lua) < 2 {
-            let value = CString::new(format!("index field must use 2 top")).unwrap();
-            return luaL_error(lua, value.as_ptr());
-        }
-    }
-    if let Some(key) = String::lua_read_with_pop(lua, 2, 0) {
-        let typeid = get_metatable_real_key::<T>();
-        unsafe {
-            sys::lua_getglobal(lua, typeid.as_ptr());
-            let is_field = LuaObject::is_field(&*key);
-            let key = CString::new(key).unwrap();
-            let t = lua_getfield(lua, -1, key.as_ptr());
-            if !is_field {
-                if t == sys::LUA_TFUNCTION {
-                    return 1;
-                } else {
-                    return 1;
-                }
-            }
-            lua_pushvalue(lua, 1);
-            lua_call(lua, 1, 1);
-            1
-        }
-    } else {
-        0
-    }
-}
-
-extern "C" fn newindex_metatable<'a, T>(lua: *mut sys::lua_State) -> libc::c_int
-where
-    T: Default + Any,
-    &'a mut T: LuaRead,
-{
-    if let Some(mut key) = String::lua_read_with_pop(lua, 2, 0) {
-        if !LuaObject::is_field(&*key) {
-            let value = CString::new(format!("key {key} not a field")).unwrap();
-            unsafe {
-                return luaL_error(lua, value.as_ptr());
-            }
-        }
-        key.push_str("__set");
-        let typeid = get_metatable_real_key::<T>();
-        unsafe {
-            sys::lua_getglobal(lua, typeid.as_ptr());
-            let key = CString::new(key).unwrap();
-            let t = lua_getfield(lua, -1, key.as_ptr());
-            if t != sys::LUA_TFUNCTION {
-                return 0;
-            }
-            lua_pushvalue(lua, 1);
-            lua_pushvalue(lua, 3);
-            lua_call(lua, 2, 1);
-            1
-        }
-    } else {
-        0
-    }
-}
-
-// constructor direct create light object,
-// in rust we alloc the memory, avoid copy the memory
-// in lua we get the object, we must free the memory
-extern "C" fn constructor_light_wrapper<T>(lua: *mut sys::lua_State) -> libc::c_int
-where
-    T: Default + Any,
-{
-    let t = Box::into_raw(Box::new(T::default()));
-    push_lightuserdata(unsafe { &mut *t }, lua, |_| {});
-
-    let typeid = get_metatable_base_key::<T>();
-    unsafe {
-        sys::lua_getglobal(lua, typeid.as_ptr());
-        sys::lua_setmetatable(lua, -2);
-    }
-    1
 }
 
 pub struct LuaObject<'a, T>
@@ -166,6 +44,137 @@ where
         val.insert((TypeId::of::<T>(), name));
     }
 
+    fn get_metatable_base_key() -> CString {
+        CString::new(format!("{:?}", TypeId::of::<T>())).unwrap()
+    }
+
+    fn get_metatable_real_key() -> CString {
+        CString::new(format!("{:?}_real", TypeId::of::<T>())).unwrap()
+    }
+
+    fn get_set_field_key(name: &str) -> CString {
+        CString::new(format!("{}__set", name)).unwrap()
+    }
+
+    /// 元表的index操作, 处理字段及函数的映射
+    extern "C" fn index_metatable(lua: *mut sys::lua_State) -> libc::c_int {
+        unsafe {
+            if lua_gettop(lua) < 2 {
+                let value = CString::new(format!("index field must use 2 top")).unwrap();
+                return luaL_error(lua, value.as_ptr());
+            }
+        }
+        if let Some(key) = String::lua_read_with_pop(lua, 2, 0) {
+            let typeid = Self::get_metatable_real_key();
+            unsafe {
+                sys::lua_getglobal(lua, typeid.as_ptr());
+                let is_field = LuaObject::is_field(&*key);
+                let key = CString::new(key).unwrap();
+                let t = lua_getfield(lua, -1, key.as_ptr());
+                if !is_field {
+                    if t == sys::LUA_TFUNCTION {
+                        return 1;
+                    } else {
+                        return 1;
+                    }
+                }
+                lua_pushvalue(lua, 1);
+                lua_call(lua, 1, 1);
+                1
+            }
+        } else {
+            0
+        }
+    }
+
+    extern "C" fn newindex_metatable(lua: *mut sys::lua_State) -> libc::c_int {
+        if let Some(mut key) = String::lua_read_with_pop(lua, 2, 0) {
+            if !LuaObject::is_field(&*key) {
+                let value = CString::new(format!("key {key} not a field")).unwrap();
+                unsafe {
+                    return luaL_error(lua, value.as_ptr());
+                }
+            }
+            key.push_str("__set");
+            let typeid = Self::get_metatable_real_key();
+            unsafe {
+                sys::lua_getglobal(lua, typeid.as_ptr());
+                let key = CString::new(key).unwrap();
+                let t = lua_getfield(lua, -1, key.as_ptr());
+                if t != sys::LUA_TFUNCTION {
+                    return 0;
+                }
+                lua_pushvalue(lua, 1);
+                lua_pushvalue(lua, 3);
+                lua_call(lua, 2, 1);
+                1
+            }
+        } else {
+            0
+        }
+    }
+
+    extern "C" fn constructor_wrapper(lua: *mut sys::lua_State) -> libc::c_int {
+        let t = T::default();
+        let lua_data_raw =
+            unsafe { sys::lua_newuserdata(lua, mem::size_of::<T>() as libc::size_t) };
+        unsafe {
+            ptr::write(lua_data_raw as *mut _, t);
+        }
+        let typeid = CString::new(format!("{:?}", TypeId::of::<T>())).unwrap();
+        unsafe {
+            sys::lua_getglobal(lua, typeid.as_ptr());
+            sys::lua_setmetatable(lua, -2);
+        }
+        1
+    }
+
+    // constructor direct create light object,
+    // in rust we alloc the memory, avoid copy the memory
+    // in lua we get the object, we must free the memory
+    extern "C" fn constructor_light_wrapper(lua: *mut sys::lua_State) -> libc::c_int {
+        let t = Box::into_raw(Box::new(T::default()));
+        push_lightuserdata(unsafe { &mut *t }, lua, |_| {});
+
+        let typeid = Self::get_metatable_base_key();
+        unsafe {
+            sys::lua_getglobal(lua, typeid.as_ptr());
+            sys::lua_setmetatable(lua, -2);
+        }
+        1
+    }
+
+    #[inline]
+    extern "C" fn destructor_light_wrapper(lua: *mut sys::lua_State) -> libc::c_int
+    where
+        &'a mut T: LuaRead,
+    {
+        let msg: &mut T = unwrap_or!(crate::LuaRead::lua_read_at_position(lua, 1), return 0);
+        unsafe {
+            sys::lua_pushnil(lua);
+            sys::lua_setmetatable(lua, 1);
+        }
+        let _msg = unsafe { Box::from_raw(msg) };
+        0
+    }
+
+    #[inline]
+    extern "C" fn destructor_bad_wrapper(lua: *mut sys::lua_State) -> libc::c_int {
+        unsafe {
+            "usedata object must not del, beacuse it belong to lua gc".push_to_lua(lua);
+            lua_error(lua)
+        }
+    }
+
+    #[inline]
+    extern "C" fn destructor_wrapper(lua: *mut sys::lua_State) -> libc::c_int {
+        unsafe {
+            let obj = sys::lua_touserdata(lua, -1);
+            ptr::drop_in_place(obj as *mut T);
+            0
+        }
+    }
+
     pub fn new(lua: *mut lua_State, name: &'static str) -> LuaObject<'a, T> {
         LuaObject {
             lua,
@@ -185,7 +194,7 @@ where
     }
 
     pub fn ensure_matetable(&mut self) -> bool {
-        let typeid = get_metatable_base_key::<T>();
+        let typeid = Self::get_metatable_base_key();
         let mut lua = Lua::from_existing_state(self.lua, false);
         match lua.queryc::<LuaTable>(&typeid) {
             Some(_) => true,
@@ -200,23 +209,23 @@ where
                 if !self.light {
                     "__gc".push_to_lua(self.lua);
 
-                    sys::lua_pushcfunction(self.lua, destructor_wrapper::<T>);
+                    sys::lua_pushcfunction(self.lua, Self::destructor_wrapper);
 
                     sys::lua_settable(self.lua, -3);
                 }
 
                 "__index".push_to_lua(self.lua);
-                sys::lua_pushcfunction(self.lua, index_metatable::<T>);
+                sys::lua_pushcfunction(self.lua, Self::index_metatable);
                 // sys::lua_newtable(self.lua);
                 sys::lua_rawset(self.lua, -3);
 
                 "__newindex".push_to_lua(self.lua);
-                sys::lua_pushcfunction(self.lua, newindex_metatable::<T>);
+                sys::lua_pushcfunction(self.lua, Self::newindex_metatable);
                 sys::lua_rawset(self.lua, -3);
 
                 sys::lua_setglobal(self.lua, typeid.as_ptr() as *const c_char);
 
-                let typeid = get_metatable_real_key::<T>();
+                let typeid = Self::get_metatable_real_key();
                 sys::lua_newtable(self.lua);
                 sys::lua_setglobal(self.lua, typeid.as_ptr());
                 false
@@ -224,17 +233,37 @@ where
         }
     }
 
+    pub fn ensure_table(&mut self) {
+        let name = CString::new(self.name).unwrap();
+        let mut lua = Lua::from_existing_state(self.lua, false);
+        if lua.queryc::<LuaTable>(&name).is_none() {
+            unsafe {
+                sys::lua_newtable(self.lua);
+                // index "__name" corresponds to the hash of the TypeId of T
+                "new".push_to_lua(self.lua);
+                if self.light {
+                    sys::lua_pushcfunction(self.lua, Self::constructor_light_wrapper);
+                } else {
+                    sys::lua_pushcfunction(self.lua, Self::constructor_wrapper);
+                }
+                sys::lua_settable(self.lua, -3);
+
+                "del".push_to_lua(self.lua);
+                if self.light {
+                    sys::lua_pushcfunction(self.lua, Self::destructor_light_wrapper);
+                } else {
+                    sys::lua_pushcfunction(self.lua, Self::destructor_bad_wrapper);
+                }
+                sys::lua_settable(self.lua, -3);
+
+                sys::lua_setglobal(self.lua, name.as_ptr() as *const c_char);
+            }
+        }
+    }
+
     pub fn create(&mut self) -> &mut LuaObject<'a, T> {
         self.ensure_matetable();
-        unsafe {
-            let name = CString::new(self.name).unwrap();
-            if self.light {
-                sys::lua_pushcfunction(self.lua, constructor_light_wrapper::<T>);
-            } else {
-                sys::lua_pushcfunction(self.lua, constructor_wrapper::<T>);
-            }
-            sys::lua_setglobal(self.lua, name.as_ptr());
-        }
+        self.ensure_table();
         self
     }
 
@@ -242,7 +271,7 @@ where
     where
         P: LuaPush,
     {
-        let typeid = get_metatable_real_key::<T>();
+        let typeid = Self::get_metatable_real_key();
         match lua.queryc::<LuaTable>(&typeid) {
             Some(mut table) => {
                 table.set(name, param);
@@ -264,10 +293,10 @@ where
     where
         P: LuaPush,
     {
-        let typeid = get_metatable_real_key::<T>();
+        let typeid = Self::get_metatable_real_key();
         match lua.queryc::<LuaTable>(&typeid) {
             Some(mut table) => {
-                table.set(get_set_field_key(name), param);
+                table.set(Self::get_set_field_key(name), param);
             }
             None => (),
         };
@@ -300,7 +329,7 @@ where
     where
         P: LuaPush,
     {
-        let typeid = get_metatable_real_key::<T>();
+        let typeid = Self::get_metatable_real_key();
         match lua.queryc::<LuaTable>(&typeid) {
             Some(mut table) => {
                 table.set(name, param);
@@ -309,12 +338,27 @@ where
         };
     }
 
+    pub fn static_def<P>(&mut self, name: &str, param: P) -> &mut LuaObject<'a, T>
+    where
+        P: LuaPush,
+    {
+        self.ensure_table();
+        let mut lua = Lua::from_existing_state(self.lua, false);
+        match lua.query::<LuaTable, _>(self.name) {
+            Some(mut table) => {
+                table.set(name, param);
+            }
+            None => (),
+        };
+        self
+    }
+
     pub fn register(
         &mut self,
         name: &str,
         func: extern "C" fn(*mut sys::lua_State) -> libc::c_int,
     ) -> &mut LuaObject<'a, T> {
-        let typeid = get_metatable_real_key::<T>();
+        let typeid = Self::get_metatable_real_key();
         let mut lua = Lua::from_existing_state(self.lua, false);
         match lua.queryc::<LuaTable>(&typeid) {
             Some(mut table) => {

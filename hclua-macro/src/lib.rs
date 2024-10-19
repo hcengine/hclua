@@ -69,7 +69,7 @@ pub fn object_macro_derive(input: TokenStream) -> TokenStream {
 
             fn register(lua: &mut hclua::Lua) {
                 let mut obj = if #is_light {
-                    hclua::LuaObject::<#ident>::new(lua.state(), &#name)
+                    hclua::LuaObject::<#ident>::new_light(lua.state(), &#name)
                 } else {
                     hclua::LuaObject::<#ident>::new(lua.state(), &#name)
                 };
@@ -85,6 +85,20 @@ pub fn object_macro_derive(input: TokenStream) -> TokenStream {
                 hclua::LuaObject::<#ident>::object_def(lua, name, param);
             }
 
+            
+            fn object_static_def<P>(lua: &mut hclua::Lua, name: &str, param: P)
+            where
+                P: hclua::LuaPush,
+            {
+                let mut obj = if #is_light {
+                    hclua::LuaObject::<#ident>::new_light(lua.state(), &#name)
+                } else {
+                    hclua::LuaObject::<#ident>::new(lua.state(), &#name)
+                };
+                obj.create();
+                obj.static_def(name, param);
+            }
+
             #(#functions)*
         }
 
@@ -95,6 +109,16 @@ pub fn object_macro_derive(input: TokenStream) -> TokenStream {
                 _pop: i32,
             ) -> Option<&'a mut #ident> {
                 hclua::userdata::read_userdata(lua, index)
+            }
+        }
+        
+        impl<'a> hclua::LuaRead for &'a #ident {
+            fn lua_read_with_pop_impl(
+                lua: *mut hclua::lua_State,
+                index: i32,
+                _pop: i32,
+            ) -> Option<&'a #ident> {
+                hclua::userdata::read_userdata(lua, index).map(|v| &*v)
             }
         }
 
