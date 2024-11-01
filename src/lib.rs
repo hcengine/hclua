@@ -1,10 +1,11 @@
 
 #[macro_use]
 pub mod sys;
+use mem::MemLimit;
 pub use sys::*;
 
 use std::borrow::Borrow;
-use std::ffi::{CStr, CString};
+use std::ffi::{c_void, CStr, CString};
 use std::io::prelude::*;
 use std::fs::File;
 
@@ -26,6 +27,7 @@ pub mod rust_tables;
 mod hotfix;
 mod object;
 mod module;
+mod mem;
 
 pub use functions::{function0, function1, function2, function3, function4, function5, function6, function7, function8, function9, function10, Function};
 pub use userdata::{push_userdata, push_lightuserdata, read_userdata};
@@ -144,6 +146,10 @@ impl Lua {
             panic!("lua_newstate failed");
         }
 
+        Self::new_by_state(lua)
+    }
+
+    pub fn new_by_state(lua: *mut lua_State) -> Lua {
         // called whenever lua encounters an unexpected error.
         extern "C" fn panic(lua: *mut lua_State) -> libc::c_int {
             let err = unsafe { lua_tostring(lua, -1) };
@@ -162,11 +168,22 @@ impl Lua {
 
         unsafe { lua_atpanic(lua, panic) };
         let mut lua = Lua {
-            lua: lua,
+            lua,
             own: true,
         };
         lua.register("error_handle", error_handle);
         lua
+    }
+
+
+    pub fn new_with_limit(mem_limit: usize, name: Option<String>) -> Lua {
+        let mem = Box::into_raw(Box::new(MemLimit::new(mem_limit, name)));
+        let lua = unsafe { lua_newstate(mem::lalloc, mem as *mut c_void) };
+        if lua.is_null() {
+            panic!("lua_newstate failed");
+        }
+        Self::new_by_state(lua)
+
     }
 
     pub fn state(&mut self) -> *mut lua_State {

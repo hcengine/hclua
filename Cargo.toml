@@ -1,6 +1,6 @@
 [package]
 name = "hclua"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2021"
 authors = [ "hpnlic <hpnlic@hotmail.com>" ]
 description = "hclua"

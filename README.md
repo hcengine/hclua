@@ -146,38 +146,63 @@ if you use `userdata::push_userdata` the userdata will copy one time, for lua gc
 if you use `userdata::push_lightuserdata` the userdata life manager by rust, so none copy will occup
 
 ```rust
-use hclua::{add_object_field, lua_State, object_impl, LuaObject, LuaPush, LuaRead};
+use hclua_macro::ObjectMacro;
 
-#[derive(Default)]
-struct Xx {
-    kk: String,
-    nn: String,
+#[derive(ObjectMacro, Default)]
+#[hclua_cfg(name = HcTest)]
+#[hclua_cfg(light)]
+struct HcTestMacro {
+    #[hclua_field]
+    field: u32,
+    #[hclua_field]
+    hc: String,
 }
 
-object_impl!(Xx);
+impl HcTestMacro {
+    fn ok(&self) {
+        println!("ok!!!!");
+    }
+}
+
 
 fn main() {
     let mut lua = hclua::Lua::new();
-    let mut object = LuaObject::<Xx>::new(lua.state(), "CCCC");
-    object.create();
-    add_object_field!(object, kk, Xx, String);
-    object.add_method_get("xxx", hclua::function1(|obj: &mut Xx| "sss is xxx".to_string()));
+    HcTestMacro::register(&mut lua);
+    // 直接注册函数注册
+    HcTestMacro::object_def(&mut lua, "ok", hclua::function1(HcTestMacro::ok));
+    // 闭包注册单参数
+    HcTestMacro::object_def(&mut lua, "call1", hclua::function1(|obj: &HcTestMacro| -> u32 {
+        obj.field
+    }));
+    // 闭包注册双参数
+    HcTestMacro::object_def(&mut lua, "call2", hclua::function2(|obj: &mut HcTestMacro, val: u32| -> u32 {
+        obj.field + val
+    }));
+    HcTestMacro::object_static_def(&mut lua, "sta_run", hclua::function0(|| -> String {
+        "test".to_string()
+    }));
     lua.openlibs();
-
+    
     let val = "
-        print(aaa);
-        print(\"cccxxxxxxxxxxxxxxx\");
-        print(type(CCCC));
-        local v = CCCC();
-        print(\"vvvvv\", v:xxx())
-        print(\"kkkk\", v.kk)
-        v.kk = \"aa\";
-        print(\"ccccc\", v.kk)
-        print(\"vvvvv\", v:xxx())
+        print(type(HcTest));
+        local v = HcTest.new();
+        print(\"call ok\", v:ok())
+        print(\"call1\", v:call1())
+        print(\"call2\", v:call2(2))
+        print(\"kkkk\", v.hc)
+        v.hc = \"dddsss\";
+        print(\"kkkk ok get_hc\", v:get_hc())
+        v.hc = \"aa\";
+        print(\"new kkkkk\", v.hc)
+        v:set_hc(\"dddddd\");
+        print(\"new kkkkk1\", v.hc)
+        print(\"attemp\", v.hc1)
+        print(\"static run\", HcTest.sta_run())
+        HcTest.del(v);
     ";
-
     let _: Option<()> = lua.exec_string(val);
 }
+
 ```
 
 now we can custom function

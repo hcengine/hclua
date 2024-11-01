@@ -19,7 +19,7 @@ impl HcTestMacro {
 
 
 fn main() {
-    let mut lua = hclua::Lua::new();
+    let mut lua = hclua::Lua::new_with_limit(102400, None);
     HcTestMacro::register(&mut lua);
     // 直接注册函数注册
     HcTestMacro::object_def(&mut lua, "ok", hclua::function1(HcTestMacro::ok));
