@@ -1,6 +1,7 @@
 
 #[macro_use]
 pub mod sys;
+use log::error;
 use mem::MemLimit;
 pub use sys::*;
 
@@ -162,7 +163,7 @@ impl Lua {
             let err = unsafe { lua_tostring(lua, -1) };
             let err = unsafe { CStr::from_ptr(err) };
             let err = String::from_utf8_lossy(&err.to_bytes());
-            println!("error:{}", err);
+            error!("error:{}", err);
             0
         }
 
@@ -338,6 +339,56 @@ impl Lua {
         }
         0
     }
+
+    pub fn add_path(&mut self, is_cpath: bool, path : String) -> i32 {
+        let state = self.state();
+        // ".\\?.lua;" "!\\lua\\""?.lua;" "!\\lua\\""?\\init.lua;" "!\\""?.lua;" "!\\""?\\init.lua"
+        // "!\\""?.dll;" "!\\""loadall.dll;" ".\\?.dll"
+        unsafe {
+            let package = cstr!("package");
+            #[cfg(any(feature="lua51", feature="luajit"))]
+            let searchers = cstr!("loaders");
+            #[cfg(not(any(feature="lua51", feature="luajit")))]
+            let searchers = cstr!("searchers");
+            lua_getglobal(state, package);
+            lua_getfield(state, -1, searchers);
+            lua_getfield(state, -2, if is_cpath { cstr!("cpath") } else { cstr!("path") } );
+            let ori_path = lua_tostring(state, -1);
+            let ori_path = if !ori_path.is_null() {
+                let ori_path = unsafe { CStr::from_ptr(ori_path) };
+                let mut ori_path = String::from_utf8(ori_path.to_bytes().to_vec().clone()).unwrap_or(String::new());
+                println!("ori_path = {:?}", ori_path);
+                let path = if is_cpath {
+                    if cfg!(target_os = "windows") {
+                        format!(r#";./{}/?.dll;"#, path)
+                    } else {
+                        format!(r#";./{}/?.so;"#, path)
+                    }
+                } else {
+                    format!(r#";./{}/?.lua;./{}/?/init.lua"#, path, path)
+                };
+                ori_path + &path
+            } else {
+                if is_cpath {
+                    if cfg!(target_os = "windows") {
+                        format!(r#";./{}/?.dll;"#, path)
+                    } else {
+                        format!(r#";./{}/?.so;"#, path)
+                    }
+                } else {
+                    format!(r#";./{}/?.lua;./{}/?/init.lua"#, path, path)
+                }
+            };
+
+            lua_pop(state, 1);
+            ori_path.push_to_lua(state);
+            lua_setfield(state, -3, if is_cpath { cstr!("cpath") } else { cstr!("path") } );
+            lua_pop(state, 1);
+            lua_pop(state, 1);
+        }
+        0
+    }
+
 
     pub fn get_top(&mut self) -> i32 {
         unsafe {
