@@ -36,6 +36,17 @@ pub const LUA_ERRSYNTAX: c_int = 3;
 pub const LUA_ERRMEM: c_int = 4;
 pub const LUA_ERRERR: c_int = 5;
 
+#[repr(C)]
+pub struct global_State {
+    _data: [u8; 0],
+    _marker: PhantomData<(*mut u8, PhantomPinned)>,
+}
+
+#[link(name = "lua54", kind="static")]
+extern "C" {
+    pub fn lua_getgs(L: *mut lua_State) -> *mut global_State;
+}
+
 /// A raw Lua state associated with a thread.
 #[repr(C)]
 pub struct lua_State {

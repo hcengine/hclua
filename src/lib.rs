@@ -1,47 +1,62 @@
-
 #[macro_use]
 pub mod sys;
+
 use log::error;
 use mem::MemLimit;
 pub use sys::*;
 
+pub use hclua_macro::ObjectMacro;
+
+use lazy_static::lazy_static;
 use std::borrow::Borrow;
+use std::collections::HashMap;
 use std::ffi::{c_void, CStr, CString};
-use std::io::prelude::*;
 use std::fs::File;
+use std::io::prelude::*;
+use std::ptr;
+use std::sync::RwLock;
 
 macro_rules! unwrap_or {
-    ($expr:expr, $or:expr) => (
+    ($expr:expr, $or:expr) => {
         match $expr {
             Some(x) => x,
-            None => { $or }
+            None => $or,
         }
-    )
+    };
 }
 
-pub mod values;
-pub mod lua_tables;
 pub mod functions;
-pub mod userdata;
-pub mod tuples;
-pub mod rust_tables;
 mod hotfix;
-mod object;
-mod module;
+pub mod lua_tables;
 mod mem;
+mod module;
+mod object;
+pub mod rust_tables;
+pub mod tuples;
+pub mod userdata;
+pub mod values;
 
-pub use functions::{function0, function1, function2, function3, function4, function5, function6, function7, function8, function9, function10, Function};
-pub use userdata::{push_userdata, push_lightuserdata, read_userdata};
+pub use functions::{
+    function0, function1, function10, function2, function3, function4, function5, function6,
+    function7, function8, function9, Function,
+};
 pub use lua_tables::LuaTable;
-pub use values::RawString;
-pub use object::LuaObject;
 pub use module::LuaModule;
+pub use object::LuaObject;
+pub use userdata::{push_lightuserdata, push_userdata, read_userdata};
+pub use values::RawString;
+
+struct WrapCvoid(*mut libc::c_void);
+unsafe impl Send for WrapCvoid {}
+unsafe impl Sync for WrapCvoid {}
+lazy_static! {
+    static ref EXTRA_DATA: RwLock<HashMap<usize, WrapCvoid>> = RwLock::new(HashMap::new());
+}
 
 pub struct Lua {
     lua: *mut lua_State,
     own: bool,
 }
-
 
 pub struct LuaGuard {
     pub lua: *mut lua_State,
@@ -49,7 +64,6 @@ pub struct LuaGuard {
 }
 
 impl LuaGuard {
-
     pub fn forget(mut self) -> i32 {
         let size = self.size;
         self.size = 0;
@@ -64,10 +78,7 @@ impl LuaGuard {
     }
 
     pub fn new_empty(lua: *mut lua_State) -> LuaGuard {
-        LuaGuard {
-            lua: lua,
-            size: 0,
-        }
+        LuaGuard { lua: lua, size: 0 }
     }
 
     pub fn new(lua: *mut lua_State, size: i32) -> LuaGuard {
@@ -77,7 +88,6 @@ impl LuaGuard {
         }
     }
 }
-
 
 macro_rules! impl_exec_func {
     ($name:ident, $($p:ident),*) => (
@@ -105,7 +115,6 @@ macro_rules! impl_exec_func {
         }
     )
 }
-
 
 macro_rules! impl_read_func {
     ($name:ident, $($p:ident),*) => (
@@ -168,14 +177,10 @@ impl Lua {
         }
 
         unsafe { lua_atpanic(lua, panic) };
-        let mut lua = Lua {
-            lua,
-            own: true,
-        };
+        let mut lua = Lua { lua, own: true };
         lua.register("error_handle", error_handle);
         lua
     }
-
 
     pub fn new_with_limit(mem_limit: usize, name: Option<String>) -> Lua {
         let mem = Box::into_raw(Box::new(MemLimit::new(mem_limit, name)));
@@ -184,7 +189,6 @@ impl Lua {
             panic!("lua_newstate failed");
         }
         Self::new_by_state(lua)
-
     }
 
     pub fn state(&mut self) -> *mut lua_State {
@@ -193,8 +197,8 @@ impl Lua {
 
     pub fn clone(&mut self) -> Lua {
         Lua {
-            lua : self.lua,
-            own : false,
+            lua: self.lua,
+            own: false,
         }
     }
 
@@ -209,13 +213,18 @@ impl Lua {
     ///  * `close_at_the_end`: if true, lua_close will be called on the lua_State on the destructor
     pub fn from_existing_state(lua: *mut lua_State, close_at_the_end: bool) -> Lua {
         Lua {
-            lua : lua,
+            lua: lua,
             own: close_at_the_end,
         }
     }
 
-    pub fn register<I>(&mut self, index : I, func : extern "C" fn(*mut lua_State) -> libc::c_int) -> i32
-                    where I: Borrow<str>
+    pub fn register<I>(
+        &mut self,
+        index: I,
+        func: extern "C" fn(*mut lua_State) -> libc::c_int,
+    ) -> i32
+    where
+        I: Borrow<str>,
     {
         let index = CString::new(index.borrow()).unwrap();
         unsafe { lua_register(self.state(), index.as_ptr(), func) };
@@ -230,42 +239,56 @@ impl Lua {
 
     /// Reads the value of a global variable.
     pub fn query<'l, V, I>(&'l mut self, index: I) -> Option<V>
-                         where I: Borrow<str>, V: LuaRead
+    where
+        I: Borrow<str>,
+        V: LuaRead,
     {
         let index = CString::new(index.borrow()).unwrap();
-        unsafe { lua_getglobal(self.lua, index.as_ptr()); }
+        unsafe {
+            lua_getglobal(self.lua, index.as_ptr());
+        }
         LuaRead::lua_read_with_pop(self.state(), -1, 1)
     }
-
 
     /// Reads the value of a global variable.
     pub fn queryc<'l, V>(&'l mut self, index: &CString) -> Option<V>
-                         where V: LuaRead
+    where
+        V: LuaRead,
     {
-        unsafe { lua_getglobal(self.lua, index.as_ptr()); }
+        unsafe {
+            lua_getglobal(self.lua, index.as_ptr());
+        }
         LuaRead::lua_read_with_pop(self.state(), -1, 1)
     }
 
-
     /// Modifies the value of a global variable.
     pub fn set<I, V>(&mut self, index: I, value: V)
-                         where I: Borrow<str>, for<'a> V: LuaPush
+    where
+        I: Borrow<str>,
+        for<'a> V: LuaPush,
     {
         let index = CString::new(index.borrow()).unwrap();
         value.push_to_lua(self.state());
-        unsafe { lua_setglobal(self.lua, index.as_ptr()); }
+        unsafe {
+            lua_setglobal(self.lua, index.as_ptr());
+        }
     }
 
     /// Modifies the value of a global variable.
     pub fn setc<I, V>(&mut self, index: CString, value: V)
-                         where for<'a> V: LuaPush
+    where
+        for<'a> V: LuaPush,
     {
         value.push_to_lua(self.state());
-        unsafe { lua_setglobal(self.lua, index.as_ptr()); }
+        unsafe {
+            lua_setglobal(self.lua, index.as_ptr());
+        }
     }
 
-    pub fn exec_string<'a, I, R>(&'a mut self, index : I) -> Option<R>
-                            where I: Borrow<str>, R : LuaRead
+    pub fn exec_string<'a, I, R>(&'a mut self, index: I) -> Option<R>
+    where
+        I: Borrow<str>,
+        R: LuaRead,
     {
         let index = CString::new(index.borrow()).unwrap();
         unsafe {
@@ -282,8 +305,10 @@ impl Lua {
         }
     }
 
-    pub fn exec_func<'a, I, R>(&'a mut self, index : I) -> Option<R>
-                            where I: Borrow<str>, R : LuaRead
+    pub fn exec_func<'a, I, R>(&'a mut self, index: I) -> Option<R>
+    where
+        I: Borrow<str>,
+        R: LuaRead,
     {
         let index = CString::new(index.borrow()).unwrap();
         unsafe {
@@ -293,7 +318,7 @@ impl Lua {
             lua_insert(state, -top - 1);
             lua_getglobal(state, cstr!("error_handle"));
             lua_insert(state, -top - 2);
-            let success = lua_pcall(state, top, 1, -top-2);
+            let success = lua_pcall(state, top, 1, -top - 2);
             if success != 0 {
                 let _guard = LuaGuard::new(self.lua, 2);
                 return None;
@@ -305,58 +330,68 @@ impl Lua {
 
     /// Inserts an empty table, then loads it.
     pub fn empty_table<I>(&mut self, index: I) -> LuaTable
-                              where I: Borrow<str>
+    where
+        I: Borrow<str>,
     {
         let index2 = CString::new(index.borrow()).unwrap();
-        unsafe { 
+        unsafe {
             lua_newtable(self.state());
-            lua_setglobal(self.state(), index2.as_ptr()); 
+            lua_setglobal(self.state(), index2.as_ptr());
         }
         self.query(index).unwrap()
     }
 
-    pub fn add_lualoader(&mut self, func : extern "C" fn(*mut lua_State) -> libc::c_int) -> i32 {
+    pub fn add_lualoader(&mut self, func: extern "C" fn(*mut lua_State) -> libc::c_int) -> i32 {
         let state = self.state();
         unsafe {
             let package = cstr!("package");
-            #[cfg(any(feature="lua51", feature="luajit"))]
+            #[cfg(any(feature = "lua51", feature = "luajit"))]
             let searchers = cstr!("loaders");
-            #[cfg(not(any(feature="lua51", feature="luajit")))]
+            #[cfg(not(any(feature = "lua51", feature = "luajit")))]
             let searchers = cstr!("searchers");
             lua_getglobal(state, package);
             lua_getfield(state, -1, searchers);
             lua_pushcfunction(state, func);
             let mut i = (lua_rawlen(state, -2) + 1) as lua_Integer;
             while i > 2 {
-                lua_rawgeti(state, -2, i - 1);                               
+                lua_rawgeti(state, -2, i - 1);
                 lua_rawseti(state, -3, i);
                 i = i - 1;
             }
             lua_rawseti(state, -2, 2);
             // set loaders into package
-            lua_setfield(state, -2, searchers);                               
+            lua_setfield(state, -2, searchers);
             lua_pop(state, 1);
         }
         0
     }
 
-    pub fn add_path(&mut self, is_cpath: bool, path : String) -> i32 {
+    pub fn add_path(&mut self, is_cpath: bool, path: String) -> i32 {
         let state = self.state();
         // ".\\?.lua;" "!\\lua\\""?.lua;" "!\\lua\\""?\\init.lua;" "!\\""?.lua;" "!\\""?\\init.lua"
         // "!\\""?.dll;" "!\\""loadall.dll;" ".\\?.dll"
         unsafe {
             let package = cstr!("package");
-            #[cfg(any(feature="lua51", feature="luajit"))]
+            #[cfg(any(feature = "lua51", feature = "luajit"))]
             let searchers = cstr!("loaders");
-            #[cfg(not(any(feature="lua51", feature="luajit")))]
+            #[cfg(not(any(feature = "lua51", feature = "luajit")))]
             let searchers = cstr!("searchers");
             lua_getglobal(state, package);
             lua_getfield(state, -1, searchers);
-            lua_getfield(state, -2, if is_cpath { cstr!("cpath") } else { cstr!("path") } );
+            lua_getfield(
+                state,
+                -2,
+                if is_cpath {
+                    cstr!("cpath")
+                } else {
+                    cstr!("path")
+                },
+            );
             let ori_path = lua_tostring(state, -1);
             let ori_path = if !ori_path.is_null() {
                 let ori_path = unsafe { CStr::from_ptr(ori_path) };
-                let mut ori_path = String::from_utf8(ori_path.to_bytes().to_vec().clone()).unwrap_or(String::new());
+                let mut ori_path = String::from_utf8(ori_path.to_bytes().to_vec().clone())
+                    .unwrap_or(String::new());
                 println!("ori_path = {:?}", ori_path);
                 let path = if is_cpath {
                     if cfg!(target_os = "windows") {
@@ -382,30 +417,31 @@ impl Lua {
 
             lua_pop(state, 1);
             ori_path.push_to_lua(state);
-            lua_setfield(state, -3, if is_cpath { cstr!("cpath") } else { cstr!("path") } );
+            lua_setfield(
+                state,
+                -3,
+                if is_cpath {
+                    cstr!("cpath")
+                } else {
+                    cstr!("path")
+                },
+            );
             lua_pop(state, 1);
             lua_pop(state, 1);
         }
         0
     }
 
-
     pub fn get_top(&mut self) -> i32 {
-        unsafe {
-            lua_gettop(self.state())
-        }
+        unsafe { lua_gettop(self.state()) }
     }
 
     pub fn set_top(&mut self, top: i32) {
-        unsafe {
-            lua_settop(self.state(), top)
-        }
+        unsafe { lua_settop(self.state(), top) }
     }
 
     pub fn get_luatype(&mut self, index: i32) -> i32 {
-        unsafe {
-            lua_type(self.state(), index)
-        }
+        unsafe { lua_type(self.state(), index) }
     }
 
     pub fn is_nil(&mut self, index: i32) -> bool {
@@ -452,13 +488,82 @@ impl Lua {
         }
 
         let short_name = CString::new(short_name).unwrap();
-        let ret = unsafe { luaL_loadbuffer(self.state(), buffer.as_ptr() as *const libc::c_char, buffer.len(), short_name.as_ptr()) };
+        let ret = unsafe {
+            luaL_loadbuffer(
+                self.state(),
+                buffer.as_ptr() as *const libc::c_char,
+                buffer.len(),
+                short_name.as_ptr(),
+            )
+        };
         if ret != 0 {
-            let err_msg : String = unwrap_or!(LuaRead::lua_read(self.state()), return 0);
-            let err_detail = CString::new(format!("error loading from file {} :\n\t{}", file_name, err_msg)).unwrap();
-            unsafe { luaL_error(self.state(), err_detail.as_ptr()); }
+            let err_msg: String = unwrap_or!(LuaRead::lua_read(self.state()), return 0);
+            let err_detail = CString::new(format!(
+                "error loading from file {} :\n\t{}",
+                file_name, err_msg
+            ))
+            .unwrap();
+            unsafe {
+                luaL_error(self.state(), err_detail.as_ptr());
+            }
         }
         1
+    }
+
+    pub fn copy_to_extraspace<T>(&mut self, ptr: *mut T) {
+        unsafe {
+            #[cfg(any(feature = "lua53", feature = "lua54"))]
+            libc::memcpy(
+                lua_getextraspace(self.state()),
+                ptr as *mut c_void,
+                std::mem::size_of::<*mut c_void>(),
+            );
+            #[cfg(not(any(feature = "lua53", feature = "lua54")))]
+            {
+                let size = lua_getgs(self.state()) as usize;
+                EXTRA_DATA
+                    .write()
+                    .unwrap()
+                    .insert(size, WrapCvoid(ptr as *mut libc::c_void));
+            }
+        }
+    }
+
+    pub fn read_from_extraspace<T>(&mut self) -> *mut T {
+        unsafe {
+            #[cfg(any(feature = "lua53", feature = "lua54"))]
+            return lua_getextraspace(self.state()) as *mut T;
+            #[cfg(not(any(feature = "lua53", feature = "lua54")))]
+            {
+                let size = lua_getgs(self.state()) as usize;
+                return EXTRA_DATA
+                    .read()
+                    .unwrap()
+                    .get(&size)
+                    .map(|v| v.0)
+                    .clone()
+                    .unwrap_or(ptr::null_mut()) as *mut T;
+            }
+        }
+    }
+
+    pub fn close_extraspace(&mut self) {
+        unsafe {
+            #[cfg(any(feature = "lua53", feature = "lua54"))]
+            libc::memset(
+                lua_getextraspace(self.state()),
+                0,
+                std::mem::size_of::<*mut c_void>(),
+            );
+            #[cfg(not(any(feature = "lua53", feature = "lua54")))]
+            {
+                let size = lua_getgs(self.state()) as usize;
+                EXTRA_DATA
+                    .write()
+                    .unwrap()
+                    .remove(&size);
+            }
+        }
     }
 
     /// enable hotfix, can update the new func, and the old data will be keep and bind to the new func
@@ -467,10 +572,10 @@ impl Lua {
     }
 
     pub fn exec_gc(&mut self) -> i32 {
-        unsafe { lua_gc(self.state(), LUA_GCCOLLECT, 0) as i32 } 
+        unsafe { lua_gc(self.state(), LUA_GCCOLLECT, 0) as i32 }
     }
 
-    impl_exec_func!(exec_func0, );
+    impl_exec_func!(exec_func0,);
     impl_exec_func!(exec_func1, A);
     impl_exec_func!(exec_func2, A, B);
     impl_exec_func!(exec_func3, A, B, C);
@@ -482,8 +587,7 @@ impl Lua {
     impl_exec_func!(exec_func9, A, B, C, D, E, F, G, H, I);
     impl_exec_func!(exec_func10, A, B, C, D, E, F, G, H, I, J);
 
-
-    impl_read_func!(read_func0, );
+    impl_read_func!(read_func0,);
     impl_read_func!(read_func1, A);
     impl_read_func!(read_func2, A, B);
     impl_read_func!(read_func3, A, B, C);
@@ -494,7 +598,6 @@ impl Lua {
     impl_read_func!(read_func8, A, B, C, D, E, F, G, H);
     impl_read_func!(read_func9, A, B, C, D, E, F, G, H, I);
     impl_read_func!(read_func10, A, B, C, D, E, F, G, H, I, J);
-
 }
 
 /// Types that can be given to a Lua context, for example with `lua.set()` or as a return value
@@ -532,12 +635,12 @@ pub trait LuaRead: Sized {
     }
 
     fn lua_read_with_pop_impl(lua: *mut lua_State, index: i32, pop: i32) -> Option<Self>;
-
 }
 
 impl Drop for Lua {
     fn drop(&mut self) {
         if self.own {
+            self.close_extraspace();
             unsafe { lua_close(self.lua) }
         }
     }
@@ -546,8 +649,7 @@ impl Drop for Lua {
 impl Drop for LuaGuard {
     fn drop(&mut self) {
         if self.size != 0 {
-            unsafe { 
-                lua_pop(self.lua, self.size) }
+            unsafe { lua_pop(self.lua, self.size) }
         }
     }
 }

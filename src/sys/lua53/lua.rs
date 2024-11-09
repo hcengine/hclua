@@ -37,6 +37,16 @@ pub const LUA_ERRMEM: c_int = 4;
 pub const LUA_ERRGCMM: c_int = 5;
 pub const LUA_ERRERR: c_int = 6;
 
+#[repr(C)]
+pub struct global_State {
+    _data: [u8; 0],
+    _marker: PhantomData<(*mut u8, PhantomPinned)>,
+}
+
+#[link(name = "lua53", kind="static")]
+extern "C" {
+    pub fn lua_getgs(L: *mut lua_State) -> *mut global_State;
+}
 /// A raw Lua state associated with a thread.
 #[repr(C)]
 pub struct lua_State {
@@ -303,6 +313,8 @@ pub const LUA_GCSTEP: c_int = 5;
 pub const LUA_GCSETPAUSE: c_int = 6;
 pub const LUA_GCSETSTEPMUL: c_int = 7;
 pub const LUA_GCISRUNNING: c_int = 9;
+pub const LUA_GCGEN: c_int = 10;
+pub const LUA_GCINC: c_int = 11;
 
 #[link(name = "lua53", kind="static")]
 extern "C" {

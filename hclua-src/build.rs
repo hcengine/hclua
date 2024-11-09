@@ -68,6 +68,8 @@ impl Build {
             Lua54 => source_dir_base.join("lua-5.4.6"),
         };
 
+        let ext_source = source_dir_base.join("ext");
+
         if lib_dir.exists() {
             fs::remove_dir_all(&lib_dir).unwrap();
         }
@@ -194,8 +196,9 @@ impl Build {
             .file(source_dir.join("lundump.c"))
             // skipped: lutf8lib.c (>= 5.3)
             .file(source_dir.join("lvm.c"))
-            .file(source_dir.join("lzio.c"));
-
+            .file(source_dir.join("lzio.c"))
+            // ext 
+            .file(ext_source.join("ext_lua.c"));
         match version {
             Lua51 => {}
             Lua52 => {
