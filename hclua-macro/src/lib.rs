@@ -1,8 +1,9 @@
 use proc_macro::TokenStream;
+use proc_macro2::{Ident, Span};
 use quote::{format_ident, quote};
-use syn::{self, ItemStruct};
+use syn::meta::ParseNestedMeta;
+use syn::{self, ItemStruct, parse_macro_input, ItemFn, LitStr, Result};
 
-use syn::parse_macro_input;
 mod config;
 
 #[proc_macro_derive(ObjectMacro, attributes(hclua_field, hclua_cfg))]
@@ -18,7 +19,11 @@ pub fn object_macro_derive(input: TokenStream) -> TokenStream {
         .iter()
         .map(|field| {
             let field_ident = field.ident.clone().unwrap();
-            if field.attrs.iter().any(|attr| attr.path().is_ident("hclua_field")) {
+            if field
+                .attrs
+                .iter()
+                .any(|attr| attr.path().is_ident("hclua_field"))
+            {
                 let get_name = format_ident!("get_{}", field_ident);
                 let set_name = format_ident!("set_{}", field_ident);
                 let ty = field.ty.clone();
@@ -85,7 +90,7 @@ pub fn object_macro_derive(input: TokenStream) -> TokenStream {
                 hclua::LuaObject::<#ident>::object_def(lua, name, param);
             }
 
-            
+
             fn object_static_def<P>(lua: &mut hclua::Lua, name: &str, param: P)
             where
                 P: hclua::LuaPush,
@@ -111,7 +116,7 @@ pub fn object_macro_derive(input: TokenStream) -> TokenStream {
                 hclua::userdata::read_userdata(lua, index)
             }
         }
-        
+
         impl<'a> hclua::LuaRead for &'a #ident {
             fn lua_read_with_pop_impl(
                 lua: *mut hclua::lua_State,
@@ -142,4 +147,61 @@ pub fn object_macro_derive(input: TokenStream) -> TokenStream {
         }
     };
     gen.into()
+}
+
+#[derive(Default)]
+struct ModuleAttributes {
+    name: Option<Ident>,
+}
+
+impl ModuleAttributes {
+    fn parse(&mut self, meta: ParseNestedMeta) -> Result<()> {
+        if meta.path.is_ident("name") {
+            match meta.value() {
+                Ok(value) => {
+                    self.name = Some(value.parse::<LitStr>()?.parse()?);
+                }
+                Err(_) => {
+                    return Err(meta.error("`name` attribute must have a value"));
+                }
+            }
+        } else {
+            return Err(meta.error("unsupported module attribute"));
+        }
+        Ok(())
+    }
+}
+
+#[proc_macro_attribute]
+pub fn lua_module(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let mut args = ModuleAttributes::default();
+    if !attr.is_empty() {
+        let args_parser = syn::meta::parser(|meta| args.parse(meta));
+        parse_macro_input!(attr with args_parser);
+    }
+
+    let func = parse_macro_input!(item as ItemFn);
+    let func_name = &func.sig.ident;
+    let module_name = args.name.unwrap_or_else(|| func_name.clone());
+    let ext_entrypoint_name = Ident::new(&format!("luaopen_{module_name}"), Span::call_site());
+
+    let wrapped = quote! {
+        #func
+
+        #[no_mangle]
+        unsafe extern "C-unwind" fn #ext_entrypoint_name(state: *mut hclua::lua_State) -> ::std::os::raw::c_int {
+            use hclua::LuaPush;
+            
+            let mut lua = Lua::from_existing_state(state, false);
+            if let Some(v) = #func_name(&mut lua) {
+                v.push_to_lua(state);
+                1
+            } else {
+                lua.error(format!("load module: {:?} failed", 1));
+                0
+            }
+        }
+    };
+
+    wrapped.into()
 }

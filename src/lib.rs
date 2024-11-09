@@ -5,7 +5,7 @@ use log::error;
 use mem::MemLimit;
 pub use sys::*;
 
-pub use hclua_macro::ObjectMacro;
+pub use hclua_macro::{ObjectMacro, lua_module};
 
 use lazy_static::lazy_static;
 use std::borrow::Borrow;
@@ -341,6 +341,14 @@ impl Lua {
         self.query(index).unwrap()
     }
 
+    pub fn create_table(&mut self) -> LuaTable
+    {
+        unsafe {
+            lua_newtable(self.state());
+            LuaRead::lua_read_with_pop(self.state(), -1, 1).unwrap()
+        }
+    }
+
     pub fn add_lualoader(&mut self, func: extern "C" fn(*mut lua_State) -> libc::c_int) -> i32 {
         let state = self.state();
         unsafe {
@@ -389,7 +397,7 @@ impl Lua {
             );
             let ori_path = lua_tostring(state, -1);
             let ori_path = if !ori_path.is_null() {
-                let ori_path = unsafe { CStr::from_ptr(ori_path) };
+                let ori_path = CStr::from_ptr(ori_path);
                 let mut ori_path = String::from_utf8(ori_path.to_bytes().to_vec().clone())
                     .unwrap_or(String::new());
                 println!("ori_path = {:?}", ori_path);
@@ -508,6 +516,13 @@ impl Lua {
             }
         }
         1
+    }
+
+    pub fn error<T: Into<Vec<u8>>>(&mut self, val: T) {
+        let err = CString::new(val).unwrap();
+        unsafe {
+            luaL_error(self.state(), err.as_ptr());
+        }
     }
 
     pub fn copy_to_extraspace<T>(&mut self, ptr: *mut T) {

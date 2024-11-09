@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use libc;
 
-use crate::{LuaPush, LuaRead, lua_State, sys};
+use crate::{lua_State, lua_pushvalue, sys, LuaPush, LuaRead};
 
 /// Represents a table stored in the Lua context.
 ///
@@ -19,9 +19,18 @@ impl LuaRead for LuaTable {
             for _ in 0 .. pop {
                 unsafe { sys::lua_pushnil(lua); }
             }
-            Some(LuaTable { table: lua, pop : pop, index : index })
+            Some(LuaTable { table: lua, pop, index })
         } else {
             None
+        }
+    }
+}
+
+impl LuaPush for LuaTable {
+    fn push_to_lua(self, lua: *mut lua_State) -> i32 {
+        unsafe {
+            lua_pushvalue(lua, self.index);
+            1
         }
     }
 }
