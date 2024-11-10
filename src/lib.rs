@@ -555,7 +555,7 @@ impl Lua {
                     .get(&size)
                     .map(|v| v.0)
                     .clone()
-                    .unwrap_or(ptr::null_mut()) as *mut T;
+                    .unwrap_or(std::ptr::null_mut()) as *mut T;
             }
         }
     }
