@@ -184,12 +184,16 @@ pub fn lua_module(attr: TokenStream, item: TokenStream) -> TokenStream {
     let func_name = &func.sig.ident;
     let module_name = args.name.unwrap_or_else(|| func_name.clone());
     let ext_entrypoint_name = Ident::new(&format!("luaopen_{module_name}"), Span::call_site());
+    let ext_register = Ident::new(&format!("luareg_{module_name}"), Span::call_site());
+    let name = module_name.to_string();
+    
 
     let wrapped = quote! {
         #func
 
         #[no_mangle]
-        unsafe extern "C-unwind" fn #ext_entrypoint_name(state: *mut hclua::lua_State) -> ::std::os::raw::c_int {
+        #[link(kind="static")]
+        unsafe extern "C" fn #ext_entrypoint_name(state: *mut hclua::lua_State) -> libc::c_int {
             use hclua::LuaPush;
             
             let mut lua = Lua::from_existing_state(state, false);
@@ -199,6 +203,22 @@ pub fn lua_module(attr: TokenStream, item: TokenStream) -> TokenStream {
             } else {
                 lua.error(format!("load module: {:?} failed", 1));
                 0
+            }
+        }
+
+        pub fn #ext_register(state: *mut hclua::lua_State) {
+            unsafe {
+                let cstr = std::ffi::CString::new(#name).unwrap();
+                let value = cstr.as_ptr();
+                hclua::luaL_requiref(state, value, #ext_entrypoint_name, 1 as libc::c_int);
+                
+
+                if #name.contains('_') {
+                    let new = #name.replace("_", ".");
+                    let cstr = std::ffi::CString::new(new).unwrap();
+                    let value = cstr.as_ptr();
+                    hclua::luaL_requiref(state, value, #ext_entrypoint_name, 1 as libc::c_int);
+                }
             }
         }
     };

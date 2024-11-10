@@ -13,7 +13,6 @@ use std::collections::HashMap;
 use std::ffi::{c_void, CStr, CString};
 use std::fs::File;
 use std::io::prelude::*;
-use std::ptr;
 use std::sync::RwLock;
 
 macro_rules! unwrap_or {
@@ -398,9 +397,8 @@ impl Lua {
             let ori_path = lua_tostring(state, -1);
             let ori_path = if !ori_path.is_null() {
                 let ori_path = CStr::from_ptr(ori_path);
-                let mut ori_path = String::from_utf8(ori_path.to_bytes().to_vec().clone())
+                let ori_path = String::from_utf8(ori_path.to_bytes().to_vec().clone())
                     .unwrap_or(String::new());
-                println!("ori_path = {:?}", ori_path);
                 let path = if is_cpath {
                     if cfg!(target_os = "windows") {
                         format!(r#";./{}/?.dll;"#, path)
