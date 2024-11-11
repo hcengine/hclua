@@ -523,17 +523,20 @@ impl Lua {
         }
     }
 
-    pub fn copy_to_extraspace<T>(&mut self, ptr: *mut T) {
+    pub fn copy_to_extraspace<T>(lua: *mut lua_State, ptr: *mut T) {
         unsafe {
             #[cfg(any(feature = "lua53", feature = "lua54"))]
-            libc::memcpy(
-                lua_getextraspace(self.state()),
-                ptr as *mut c_void,
-                std::mem::size_of::<*mut c_void>(),
-            );
+            {
+                let s = ptr as usize;
+                libc::memcpy(
+                    lua_getextraspace(lua),
+                    &s as *const usize as *const c_void,
+                    std::mem::size_of::<*mut c_void>(),
+                );
+            }
             #[cfg(not(any(feature = "lua53", feature = "lua54")))]
             {
-                let size = lua_getgs(self.state()) as usize;
+                let size = lua_getgs(lua) as usize;
                 EXTRA_DATA
                     .write()
                     .unwrap()
@@ -542,35 +545,37 @@ impl Lua {
         }
     }
 
-    pub fn read_from_extraspace<T>(&mut self) -> *mut T {
-        unsafe {
-            #[cfg(any(feature = "lua53", feature = "lua54"))]
-            return lua_getextraspace(self.state()) as *mut T;
-            #[cfg(not(any(feature = "lua53", feature = "lua54")))]
-            {
-                let size = lua_getgs(self.state()) as usize;
-                return EXTRA_DATA
-                    .read()
-                    .unwrap()
-                    .get(&size)
-                    .map(|v| v.0)
-                    .clone()
-                    .unwrap_or(std::ptr::null_mut()) as *mut T;
-            }
+    /// 不能判断该指针是否符合指定类型, 需程序中自我检查
+    pub unsafe fn read_from_extraspace<T>(lua: *mut lua_State) -> *mut T {
+        #[cfg(any(feature = "lua53", feature = "lua54"))]
+        {
+            let s = lua_getextraspace(lua) as *mut usize;
+            return unsafe { (*s as *const T) as *mut T };
+        }
+        #[cfg(not(any(feature = "lua53", feature = "lua54")))]
+        {
+            let size = lua_getgs(lua) as usize;
+            return EXTRA_DATA
+                .read()
+                .unwrap()
+                .get(&size)
+                .map(|v| v.0)
+                .clone()
+                .unwrap_or(std::ptr::null_mut()) as *mut T;
         }
     }
 
-    pub fn close_extraspace(&mut self) {
+    pub fn close_extraspace(lua: *mut lua_State) {
         unsafe {
             #[cfg(any(feature = "lua53", feature = "lua54"))]
             libc::memset(
-                lua_getextraspace(self.state()),
+                lua_getextraspace(lua),
                 0,
                 std::mem::size_of::<*mut c_void>(),
             );
             #[cfg(not(any(feature = "lua53", feature = "lua54")))]
             {
-                let size = lua_getgs(self.state()) as usize;
+                let size = lua_getgs(lua) as usize;
                 EXTRA_DATA
                     .write()
                     .unwrap()
@@ -653,7 +658,7 @@ pub trait LuaRead: Sized {
 impl Drop for Lua {
     fn drop(&mut self) {
         if self.own {
-            self.close_extraspace();
+            Lua::close_extraspace(self.lua);
             unsafe { lua_close(self.lua) }
         }
     }
