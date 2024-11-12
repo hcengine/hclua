@@ -28,11 +28,11 @@ pub fn object_macro_derive(input: TokenStream) -> TokenStream {
                 let set_name = format_ident!("set_{}", field_ident);
                 let ty = field.ty.clone();
                 quote! {
-                    fn #get_name(&mut self) -> &#ty {
+                    pub fn #get_name(&mut self) -> &#ty {
                         &self.#field_ident
                     }
 
-                    fn #set_name(&mut self, val: #ty) {
+                    pub fn #set_name(&mut self, val: #ty) {
                         self.#field_ident = val;
                     }
                 }
@@ -85,11 +85,11 @@ pub fn object_macro_derive(input: TokenStream) -> TokenStream {
     let is_light = config.light;
     let gen = quote! {
         impl #ident {
-            fn register_field(lua: &mut hclua::Lua) {
+            pub fn register_field(lua: &mut hclua::Lua) {
                 #(#registers)*
             }
 
-            fn register(lua: &mut hclua::Lua) {
+            pub fn register(lua: &mut hclua::Lua) {
                 let mut obj = if #is_light {
                     hclua::LuaObject::<#ident>::new_light(lua.state(), &#name)
                 } else {
@@ -104,7 +104,7 @@ pub fn object_macro_derive(input: TokenStream) -> TokenStream {
                 }))
             }
 
-            fn object_def<P>(lua: &mut hclua::Lua, name: &str, param: P)
+            pub fn object_def<P>(lua: &mut hclua::Lua, name: &str, param: P)
             where
                 P: hclua::LuaPush,
             {
@@ -112,7 +112,7 @@ pub fn object_macro_derive(input: TokenStream) -> TokenStream {
             }
 
 
-            fn object_static_def<P>(lua: &mut hclua::Lua, name: &str, param: P)
+            pub fn object_static_def<P>(lua: &mut hclua::Lua, name: &str, param: P)
             where
                 P: hclua::LuaPush,
             {
