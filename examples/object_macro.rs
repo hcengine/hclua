@@ -1,14 +1,15 @@
 
+use hclua::{LuaRead, LuaTable};
 use hclua_macro::ObjectMacro;
 
 #[derive(ObjectMacro, Default)]
 #[hclua_cfg(name = HcTest)]
 #[hclua_cfg(light)]
 struct HcTestMacro {
-    #[hclua_field]
     field: u32,
-    #[hclua_field]
     hc: String,
+    #[hclua_skip]
+    vec: Vec<u8>
 }
 
 impl HcTestMacro {
@@ -35,10 +36,16 @@ fn main() {
         "test".to_string()
     }));
     lua.openlibs();
-    
+    println!("xxxxxxxxxx");
     let val = "
         print(type(HcTest));
         local v = HcTest.new();
+        v:set_from_table({
+            hc = \"string\",
+            field = 12345,
+        })
+        print(\"hc\", v.hc)
+        print(\"field\", v.field)
         print(\"call ok\", v:ok())
         print(\"call1\", v:call1())
         print(\"call2\", v:call2(2))

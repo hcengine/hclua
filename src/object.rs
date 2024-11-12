@@ -420,3 +420,16 @@ macro_rules! object_impl {
         }
     };
 }
+
+pub struct WrapObject<T>(pub T);
+
+impl<'a, T> LuaRead for WrapObject<T>
+where
+    T: Clone + 'a,
+    &'a mut T: LuaRead,
+{
+    fn lua_read_with_pop_impl(lua: *mut lua_State, index: i32, pop: i32) -> Option<Self> {
+        let v: Option<&mut T> = LuaRead::lua_read_with_pop_impl(lua, index, pop);
+        v.map(|v| WrapObject(v.clone()))
+    }
+}
