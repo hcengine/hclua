@@ -1,15 +1,35 @@
-
 use hclua::{LuaRead, LuaTable};
 use hclua_macro::ObjectMacro;
 
 #[derive(ObjectMacro, Default)]
+#[hclua_cfg(name = HcTest1)]
+#[hclua_cfg(light)]
+struct HcTestMacro1 {
+    field: u32,
+    hc: String,
+    #[hclua_skip]
+    vec: Vec<u8>,
+}
+
+
+#[derive(ObjectMacro)]
 #[hclua_cfg(name = HcTest)]
 #[hclua_cfg(light)]
 struct HcTestMacro {
     field: u32,
     hc: String,
     #[hclua_skip]
-    vec: Vec<u8>
+    vec: Vec<u8>,
+}
+
+impl Default for HcTestMacro {
+    fn default() -> Self {
+        Self {
+            field: Default::default(),
+            hc: Default::default(),
+            vec: Default::default(),
+        }
+    }
 }
 
 impl HcTestMacro {
@@ -18,23 +38,28 @@ impl HcTestMacro {
     }
 }
 
-
 fn main() {
     let mut lua = hclua::Lua::new_with_limit(102400, None);
     HcTestMacro::register(&mut lua);
     // 直接注册函数注册
     HcTestMacro::object_def(&mut lua, "ok", hclua::function1(HcTestMacro::ok));
     // 闭包注册单参数
-    HcTestMacro::object_def(&mut lua, "call1", hclua::function1(|obj: &HcTestMacro| -> u32 {
-        obj.field
-    }));
+    HcTestMacro::object_def(
+        &mut lua,
+        "call1",
+        hclua::function1(|obj: &HcTestMacro| -> u32 { obj.field }),
+    );
     // 闭包注册双参数
-    HcTestMacro::object_def(&mut lua, "call2", hclua::function2(|obj: &mut HcTestMacro, val: u32| -> u32 {
-        obj.field + val
-    }));
-    HcTestMacro::object_static_def(&mut lua, "sta_run", hclua::function0(|| -> String {
-        "test".to_string()
-    }));
+    HcTestMacro::object_def(
+        &mut lua,
+        "call2",
+        hclua::function2(|obj: &mut HcTestMacro, val: u32| -> u32 { obj.field + val }),
+    );
+    HcTestMacro::object_static_def(
+        &mut lua,
+        "sta_run",
+        hclua::function0(|| -> String { "test".to_string() }),
+    );
     lua.openlibs();
     println!("xxxxxxxxxx");
     let val = "

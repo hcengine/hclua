@@ -49,15 +49,15 @@ pub fn object_macro_derive(input: TokenStream) -> TokenStream {
             let get_name = format_ident!("get_{}", field_ident);
             let set_name = format_ident!("set_{}", field_ident);
             quote!{
-                hclua::LuaObject::add_object_method_get(lua, &stringify!(#field_ident), hclua::function1(|obj: &mut #ident| -> &#ty {
+                hclua::LuaObject::<#ident>::add_object_method_get(lua, &stringify!(#field_ident), hclua::function1(|obj: &mut #ident| -> &#ty {
                     &obj.#field_ident
                 }));
-                hclua::LuaObject::add_object_method_set(lua, &stringify!(#field_ident), hclua::function2(|obj: &mut #ident, val: #ty| {
+                hclua::LuaObject::<#ident>::add_object_method_set(lua, &stringify!(#field_ident), hclua::function2(|obj: &mut #ident, val: #ty| {
                     obj.#field_ident = val;
                 }));
-                hclua::LuaObject::object_def(lua, &stringify!(#get_name), hclua::function1(#ident::#get_name));
-                hclua::LuaObject::object_def(lua, &stringify!(#set_name), hclua::function2(#ident::#set_name));
-                hclua::LuaObject::set_field(&stringify!(#field_ident));
+                hclua::LuaObject::<#ident>::object_def(lua, &stringify!(#get_name), hclua::function1(#ident::#get_name));
+                hclua::LuaObject::<#ident>::object_def(lua, &stringify!(#set_name), hclua::function2(#ident::#set_name));
+                hclua::LuaObject::<#ident>::set_field(&stringify!(#field_ident));
             }
         } else {
             quote!{}
@@ -70,7 +70,6 @@ pub fn object_macro_derive(input: TokenStream) -> TokenStream {
         if field.attrs.iter().all(|attr| !attr.path().is_ident("hclua_skip")) {
             let ty = field.ty.clone();
             let name = format_ident!("{}", field_ident);
-            println!("name = {}", name);
             quote!{
                 let val: Option<#ty> = table.query(stringify!(#name));
                 if let Some(v) = val {
@@ -100,7 +99,7 @@ pub fn object_macro_derive(input: TokenStream) -> TokenStream {
 
                 Self::register_field(lua);
 
-                Self::object_def(lua, "set_from_table", hclua::function2(|data: &mut #ident, mut table: LuaTable| {
+                Self::object_def(lua, "set_from_table", hclua::function2(|data: &mut #ident, mut table: hclua::LuaTable| {
                     #(#create_from_table)*
                 }))
             }
