@@ -358,16 +358,40 @@ where
         name: &str,
         func: extern "C" fn(*mut sys::lua_State) -> libc::c_int,
     ) -> &mut LuaObject<'a, T> {
-        let typeid = Self::get_metatable_real_key();
         let mut lua = Lua::from_existing_state(self.lua, false);
+        Self::object_register(&mut lua, name, func);
+        self
+    }
+
+    pub fn object_register(
+        lua: &mut Lua,
+        name: &str,
+        func: extern "C" fn(*mut sys::lua_State) -> libc::c_int,
+    ) {
+        let typeid = Self::get_metatable_real_key();
         match lua.queryc::<LuaTable>(&typeid) {
             Some(mut table) => {
                 table.register(name, func);
             }
             None => (),
         };
-        self
     }
+
+    pub fn static_register(
+        &mut self,
+        name: &str,
+        func: extern "C" fn(*mut sys::lua_State) -> libc::c_int,
+    ) {
+        self.ensure_table();
+        let mut lua = Lua::from_existing_state(self.lua, false);
+        match lua.query::<LuaTable, _>(self.name) {
+            Some(mut table) => {
+                table.register(name, func);
+            }
+            None => (),
+        };
+    }
+    
 }
 
 #[macro_export]

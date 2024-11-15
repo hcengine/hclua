@@ -2,7 +2,7 @@ use proc_macro::TokenStream;
 use proc_macro2::{Ident, Span};
 use quote::{format_ident, quote};
 use syn::meta::ParseNestedMeta;
-use syn::{self, ItemStruct, parse_macro_input, ItemFn, LitStr, Result};
+use syn::{self, parse_macro_input, ItemFn, ItemStruct, LitStr, Result};
 
 mod config;
 
@@ -64,22 +64,28 @@ pub fn object_macro_derive(input: TokenStream) -> TokenStream {
         }
     }).collect();
 
-    
-    let create_from_table: Vec<_> = fields.iter().map(|field| {
-        let field_ident = field.ident.clone().unwrap();
-        if field.attrs.iter().all(|attr| !attr.path().is_ident("hclua_skip")) {
-            let ty = field.ty.clone();
-            let name = format_ident!("{}", field_ident);
-            quote!{
-                let val: Option<#ty> = table.query(stringify!(#name));
-                if let Some(v) = val {
-                    data.#field_ident = v;
+    let create_from_table: Vec<_> = fields
+        .iter()
+        .map(|field| {
+            let field_ident = field.ident.clone().unwrap();
+            if field
+                .attrs
+                .iter()
+                .all(|attr| !attr.path().is_ident("hclua_skip"))
+            {
+                let ty = field.ty.clone();
+                let name = format_ident!("{}", field_ident);
+                quote! {
+                    let val: Option<#ty> = table.query(stringify!(#name));
+                    if let Some(v) = val {
+                        data.#field_ident = v;
+                    }
                 }
+            } else {
+                quote! {}
             }
-        } else {
-            quote!{}
-        }
-    }).collect();
+        })
+        .collect();
 
     let name = config.name;
     let is_light = config.light;
@@ -111,7 +117,6 @@ pub fn object_macro_derive(input: TokenStream) -> TokenStream {
                 hclua::LuaObject::<#ident>::object_def(lua, name, param);
             }
 
-
             pub fn object_static_def<P>(lua: &mut hclua::Lua, name: &str, param: P)
             where
                 P: hclua::LuaPush,
@@ -124,6 +129,25 @@ pub fn object_macro_derive(input: TokenStream) -> TokenStream {
                 obj.create();
                 obj.static_def(name, param);
             }
+            
+            pub fn object_register(lua: &mut hclua::Lua, name: &str, 
+                func: extern "C" fn(*mut hclua::lua_State) -> libc::c_int)
+            {
+                hclua::LuaObject::<#ident>::object_register(lua, name, func);
+            }
+            
+            pub fn object_static_register(lua: &mut hclua::Lua, name: &str, 
+                func: extern "C" fn(*mut hclua::lua_State) -> libc::c_int)
+            {
+                let mut obj = if #is_light {
+                    hclua::LuaObject::<#ident>::new_light(lua.state(), &#name)
+                } else {
+                    hclua::LuaObject::<#ident>::new(lua.state(), &#name)
+                };
+                obj.create();
+                obj.static_register(name, func);
+            }
+
 
             #(#functions)*
         }
@@ -207,7 +231,6 @@ pub fn lua_module(attr: TokenStream, item: TokenStream) -> TokenStream {
     let ext_entrypoint_name = Ident::new(&format!("luaopen_{module_name}"), Span::call_site());
     let ext_register = Ident::new(&format!("luareg_{module_name}"), Span::call_site());
     let name = module_name.to_string();
-    
 
     let wrapped = quote! {
         #func
@@ -216,7 +239,7 @@ pub fn lua_module(attr: TokenStream, item: TokenStream) -> TokenStream {
         #[link(kind="static")]
         unsafe extern "C" fn #ext_entrypoint_name(state: *mut hclua::lua_State) -> libc::c_int {
             use hclua::LuaPush;
-            
+
             let mut lua = Lua::from_existing_state(state, false);
             if let Some(v) = #func_name(&mut lua) {
                 v.push_to_lua(state);
@@ -232,7 +255,7 @@ pub fn lua_module(attr: TokenStream, item: TokenStream) -> TokenStream {
                 let cstr = std::ffi::CString::new(#name).unwrap();
                 let value = cstr.as_ptr();
                 hclua::luaL_requiref(state, value, #ext_entrypoint_name, 1 as libc::c_int);
-                
+
 
                 if #name.contains('_') {
                     let new = #name.replace("_", ".");

@@ -1,6 +1,6 @@
 use std::ffi::CString;
 use libc;
-use crate::{LuaPush, LuaRead, lua_State, sys} ;
+use crate::{lua_State, lua_pushnil, sys, LuaPush, LuaRead} ;
 
 pub struct RawString(pub Vec<u8>);
 
@@ -218,5 +218,35 @@ impl LuaRead for RawString {
 
         let value = unsafe { Vec::from_raw_parts(c_str_raw as *mut u8, size, size) };
         Some(RawString(value))
+    }
+}
+
+
+impl<T: LuaPush> LuaPush for Option<T> {
+    fn push_to_lua(self, lua: *mut lua_State) -> i32 {
+        if let Some(v) = self {
+            v.push_to_lua(lua)
+        } else {
+            unsafe { lua_pushnil(lua) };
+            1
+        }
+    }
+}
+
+impl<'a, T> LuaPush for &'a Option<T>
+where &'a T: LuaPush {
+    fn push_to_lua(self, lua: *mut lua_State) -> i32 {
+        if let Some(v) = self {
+            v.push_to_lua(lua)
+        } else {
+            unsafe { lua_pushnil(lua) };
+            1
+        }
+    }
+}
+
+impl<T: LuaRead> LuaRead for Option<T> {
+    fn lua_read_with_pop_impl(lua: *mut lua_State, index: i32, pop: i32) -> Option<Self> {
+        Some(T::lua_read_with_pop_impl(lua, index, pop))
     }
 }
