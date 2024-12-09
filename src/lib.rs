@@ -52,6 +52,9 @@ lazy_static! {
     static ref EXTRA_DATA: RwLock<HashMap<usize, WrapCvoid>> = RwLock::new(HashMap::new());
 }
 
+#[allow(non_camel_case_types)]
+pub type c_int = libc::c_int;
+
 pub struct Lua {
     lua: *mut lua_State,
     own: bool,
