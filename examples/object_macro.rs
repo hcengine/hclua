@@ -1,24 +1,28 @@
-use hclua::{LuaRead, LuaTable};
+use hclua::{LuaRead, LuaTable, WrapSerde};
 use hclua_macro::ObjectMacro;
+use serde::{Deserialize, Serialize};
 
-#[derive(ObjectMacro, Default)]
+#[derive(ObjectMacro, Default, Serialize, Deserialize)]
 #[hclua_cfg(name = HcTest1)]
 #[hclua_cfg(light)]
 struct HcTestMacro1 {
+    #[serde(default)]
     field: u32,
     hc: String,
     #[hclua_skip]
+    #[serde(default)]
     vec: Vec<u8>,
 }
 
-
-#[derive(ObjectMacro)]
+#[derive(ObjectMacro, Serialize, Deserialize)]
 #[hclua_cfg(name = HcTest)]
 #[hclua_cfg(light)]
 struct HcTestMacro {
+    #[serde(default)]
     field: u32,
     hc: String,
     #[hclua_skip]
+    #[serde(default)]
     vec: Vec<u8>,
 }
 
@@ -55,6 +59,18 @@ fn main() {
         "call2",
         hclua::function2(|obj: &mut HcTestMacro, val: u32| -> u32 { obj.field + val }),
     );
+    // 闭包注册双参数
+    HcTestMacro::object_def(
+        &mut lua,
+        "call3",
+        hclua::function2(
+            |obj: &mut HcTestMacro, mut bb: WrapSerde<HcTestMacro>| -> WrapSerde<HcTestMacro> {
+                println!("aaaaaaaaaaaaaa = {:?}", bb.value.hc);
+                bb.value.hc = "from call3".to_string();
+                return bb;
+            },
+        ),
+    );
     HcTestMacro::object_static_def(
         &mut lua,
         "sta_run",
@@ -75,6 +91,12 @@ fn main() {
         print(\"call1\", v:call1())
         print(\"call2\", v:call2(2))
         print(\"kkkk\", v.hc)
+        local obj = {
+            hc = \"from lua\";
+        }
+        local obj1 = v:call3(obj);
+        print(\"kkkk ok call3\", obj1.hc)
+
         v.hc = \"dddsss\";
         print(\"kkkk ok get_hc\", v:get_hc())
         v.hc = \"aa\";

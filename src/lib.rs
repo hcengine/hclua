@@ -1,10 +1,21 @@
 #[macro_use]
 pub mod sys;
 
+macro_rules! unwrap_or {
+    ($expr:expr, $or:expr) => {
+        match $expr {
+            Some(x) => x,
+            None => $or,
+        }
+    };
+}
+mod protocol;
+
 use log::error;
 use mem::MemLimit;
 pub use sys::*;
 
+pub use protocol::*;
 pub use hclua_macro::{ObjectMacro, lua_module};
 
 use lazy_static::lazy_static;
@@ -15,14 +26,6 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::sync::RwLock;
 
-macro_rules! unwrap_or {
-    ($expr:expr, $or:expr) => {
-        match $expr {
-            Some(x) => x,
-            None => $or,
-        }
-    };
-}
 
 pub mod functions;
 mod hotfix;
@@ -520,9 +523,13 @@ impl Lua {
     }
 
     pub fn error<T: Into<Vec<u8>>>(&mut self, val: T) {
+        Self::lua_error(self.state(), val);
+    }
+
+    pub fn lua_error<T: Into<Vec<u8>>>(lua: *mut lua_State, val: T) {
         let err = CString::new(val).unwrap();
         unsafe {
-            luaL_error(self.state(), err.as_ptr());
+            luaL_error(lua, err.as_ptr());
         }
     }
 

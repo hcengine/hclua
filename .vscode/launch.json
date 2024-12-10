@@ -63,6 +63,25 @@
         {
             "type": "lldb",
             "request": "launch",
+            "name": "object_macro",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--example=object_macro",
+                    "--package=hclua",
+                    "--features=lua52"
+                ],
+                "filter": {
+                    "name": "object_macro",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
             "name": "Debug unit tests in example 'speed'",
             "cargo": {
                 "args": [
