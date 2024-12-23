@@ -2,7 +2,7 @@ use crate::{lua_State, lua_pushnil, sys, LuaPush, LuaRead, LuaWrapperValue, Prot
 use hcproto::Value;
 use libc;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, ffi::CString};
+use std::{collections::HashMap, ffi::CString, net::SocketAddr};
 
 pub struct RawString(pub Vec<u8>);
 
@@ -243,6 +243,12 @@ where
     }
 }
 
+impl LuaPush for SocketAddr {
+    fn push_to_lua(self, lua: *mut lua_State) -> i32 {
+        format!("{}", self).push_to_lua(lua)
+    }
+}
+
 impl<T: LuaRead> LuaRead for Option<T> {
     fn lua_read_with_pop_impl(lua: *mut lua_State, index: i32, pop: i32) -> Option<Self> {
         Some(T::lua_read_with_pop_impl(lua, index, pop))
@@ -270,15 +276,13 @@ impl<T: Serialize> LuaPush for WrapSerde<T> {
 impl<'a, T: Deserialize<'a>> LuaRead for WrapSerde<T> {
     fn lua_read_with_pop_impl(lua: *mut lua_State, index: i32, _: i32) -> Option<Self> {
         let buffer = unwrap_or!(ProtoLua::ser_protocol(lua, index), return None);
-        {
-            let ret = hcproto::from_buffer(buffer);
-            match ret {
-                Err(e) => {
-                    crate::Lua::lua_error(lua, format!("序列化错误:{:?}", e));
-                    return None;
-                }
-                Ok(v) => return Some(WrapSerde::new(v)),
+        let ret = hcproto::from_buffer(buffer);
+        match ret {
+            Err(e) => {
+                crate::Lua::lua_error(lua, format!("序列化错误:{:?}", e));
+                return None;
             }
+            Ok(v) => return Some(WrapSerde::new(v)),
         }
     }
 }

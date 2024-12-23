@@ -150,10 +150,6 @@ where
         &'a mut T: LuaRead,
     {
         let msg: &mut T = unwrap_or!(crate::LuaRead::lua_read_at_position(lua, 1), return 0);
-        unsafe {
-            sys::lua_pushnil(lua);
-            sys::lua_setmetatable(lua, 1);
-        }
         let _msg = unsafe { Box::from_raw(msg) };
         0
     }

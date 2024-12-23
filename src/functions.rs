@@ -7,7 +7,7 @@ use std::ptr;
 
 macro_rules! impl_function {
     ($name:ident, $($p:ident),*) => (
-/// Wraps a type that implements `FnMut` so that it can be used by hlua.
+/// Wraps a type that implements `FnMut` so that it can be used by hclua.
 ///
 /// This is only needed because of a limitation in Rust's inferrence system.
         pub fn $name<Z, R $(, $p)*>(f: Z) -> Function<Z, ($($p,)*), R> where Z: FnMut($($p),*) -> R {
@@ -67,8 +67,8 @@ macro_rules! impl_wrapper {
                 _ => {
                     let err_msg = format!(
                         "wrong parameter types for callback function arguments_count \
-                                        is {}",
-                        arguments_count
+                                        is {} all have num {}",
+                        arguments_count, $num
                     );
                     err_msg.push_to_lua(lua);
                     unsafe {

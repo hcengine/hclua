@@ -16,7 +16,7 @@ dependencies = [
 
 [[package]]
 name = "algorithm"
-version = "0.1.15"
+version = "0.1.16"
 dependencies = [
  "algorithm-macro",
  "hashbrown",
@@ -26,9 +26,9 @@ dependencies = [
 
 [[package]]
 name = "algorithm"
-version = "0.1.15"
+version = "0.1.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc77de4f6a01db37f295d4784ddd97342415a68fc67af2e11bf4a3cd5f964ea9"
+checksum = "3f21185fdcebeee2719935c3ab46a90119a4dc0ac02a1344872bfe956da925fe"
 dependencies = [
  "algorithm-macro",
  "hashbrown",
@@ -103,9 +103,9 @@ dependencies = [
 
 [[package]]
 name = "hclua"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
- "algorithm 0.1.15 (registry+https://github.com/rust-lang/crates.io-index)",
+ "algorithm 0.1.16",
  "hclua-macro",
  "hclua-src",
  "hcproto",
@@ -134,9 +134,9 @@ dependencies = [
 
 [[package]]
 name = "hcproto"
-version = "0.1.1"
+version = "0.1.3"
 dependencies = [
- "algorithm 0.1.15",
+ "algorithm 0.1.16 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde",
 ]
 

@@ -34,6 +34,9 @@ impl ProtoLua {
 
     pub fn ser_protocol(lua: *mut crate::lua_State, index: i32) -> Option<Buffer> {
         let t = unsafe { crate::lua_type(lua, index) };
+        if t == crate::LUA_TNIL {
+            return None;
+        }
         if t != crate::LUA_TTABLE {
             Lua::lua_error(lua, "类型必须为table");
             return None;

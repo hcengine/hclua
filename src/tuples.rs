@@ -50,6 +50,12 @@ macro_rules! tuple_impl {
                 };
 
                 i += 1;
+                // if index > 0 {
+                //     i += 1;
+                // } else {
+                //     i -= 1;
+                // }
+                
 
                 $(
                     let $other: $other = match LuaRead::lua_read_at_position(lua, i) {
@@ -57,6 +63,11 @@ macro_rules! tuple_impl {
                         None => return None
                     };
                     i += 1;
+                    // if index > 0 {
+                    //     i += 1;
+                    // } else {
+                    //     i -= 1;
+                    // }
                 )+
 
                 Some(($first, $($other),+))
