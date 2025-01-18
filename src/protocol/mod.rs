@@ -2,12 +2,11 @@ mod proto_lua;
 mod ser_utils;
 mod wrapper;
 
-use std::fmt::{Debug, Pointer};
+use std::fmt::Debug;
 
 pub use proto_lua::ProtoLua;
 pub use ser_utils::SerUtils;
 pub use wrapper::{LuaWrapperTableValue, LuaWrapperValue, LuaWrapperVecValue};
-
 
 pub struct WrapSerde<T> {
     pub value: T,

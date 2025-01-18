@@ -1,5 +1,5 @@
 
-use crate::{ LuaPush, LuaRead, LuaTable, lua_State, sys};
+use crate::{ impl_box_push, lua_State, sys, LuaPush, LuaRead, LuaTable};
 
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
@@ -54,12 +54,14 @@ impl<T> LuaPush for Vec<T> where T: LuaPush {
     fn push_to_lua(self, lua: *mut lua_State) -> i32 {
         push_iter(lua, self.into_iter())
     }
+    impl_box_push!();
 }
 
 impl<'a, T> LuaPush for &'a [T] where T: Clone + LuaPush {
     fn push_to_lua(self, lua: *mut lua_State) -> i32 {
         push_iter(lua, self.iter().map(|e| e.clone()))
     }
+    impl_box_push!();
 }
 
 impl<K, V> LuaPush for HashMap<K, V> where K: LuaPush + Eq + Hash,
@@ -68,6 +70,7 @@ impl<K, V> LuaPush for HashMap<K, V> where K: LuaPush + Eq + Hash,
     fn push_to_lua(self, lua: *mut lua_State) -> i32 {
         push_rec_iter(lua, self.into_iter())
     }
+    impl_box_push!();
 }
 
 impl<K> LuaPush for HashSet<K> where K: LuaPush + Eq + Hash
@@ -76,6 +79,8 @@ impl<K> LuaPush for HashSet<K> where K: LuaPush + Eq + Hash
         use std::iter;
         push_rec_iter(lua, self.into_iter().zip(iter::repeat(true)))
     }
+    
+    impl_box_push!();
 }
 
 impl<T> LuaRead for Vec<T> where T : LuaRead {

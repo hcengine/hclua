@@ -132,7 +132,6 @@ where
         
         "__typeid".push_to_lua(lua);
         sys::lua_gettable(lua, -2);
-        let value: Option<String> = LuaRead::lua_read_at_position(lua, -1);
         match <String as LuaRead>::lua_read(lua) {
             Some(ref val) if val == &expected_typeid => {}
             _ => {

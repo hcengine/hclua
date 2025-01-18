@@ -1,8 +1,8 @@
-use crate::{lua_State, lua_pushnil, sys, LuaPush, LuaRead, LuaWrapperValue, ProtoLua, WrapSerde};
+use crate::{impl_box_push, lua_State, lua_pushnil, sys, LuaPush, LuaRead, LuaWrapperValue, ProtoLua, WrapSerde};
 use hcproto::Value;
 use libc;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, ffi::CString, net::SocketAddr};
+use std::{collections::HashMap, ffi::CString, net::SocketAddr, ptr};
 
 pub struct RawString(pub Vec<u8>);
 
@@ -13,12 +13,21 @@ macro_rules! integer_impl(
                 unsafe { sys::lua_pushinteger(lua, self as sys::lua_Integer) };
                 1
             }
+            fn box_push_to_lua(self: Box<Self>, lua: *mut lua_State) -> i32
+            {
+                (*self).push_to_lua(lua)
+            }
         }
 
         impl LuaPush for &$t {
             fn push_to_lua(self, lua: *mut lua_State) -> i32 {
                 unsafe { sys::lua_pushinteger(lua, *self as sys::lua_Integer) };
                 1
+            }
+
+            fn box_push_to_lua(self: Box<Self>, lua: *mut lua_State) -> i32
+            {
+                (*self).push_to_lua(lua)
             }
         }
 
@@ -52,12 +61,21 @@ macro_rules! numeric_impl(
                 unsafe { sys::lua_pushnumber(lua, self as f64) };
                 1
             }
+            fn box_push_to_lua(self: Box<Self>, lua: *mut lua_State) -> i32
+            {
+                (*self).push_to_lua(lua)
+            }
         }
 
         impl LuaPush for &$t {
             fn push_to_lua(self, lua: *mut lua_State) -> i32 {
                 unsafe { sys::lua_pushnumber(lua, *self as f64) };
                 1
+            }
+
+            fn box_push_to_lua(self: Box<Self>, lua: *mut lua_State) -> i32
+            {
+                (*self).push_to_lua(lua)
             }
         }
 
@@ -87,12 +105,14 @@ impl LuaPush for &String {
             1
         }
     }
+    impl_box_push!();
 }
 
 impl LuaPush for String {
     fn push_to_lua(self, lua: *mut lua_State) -> i32 {
         (&self).push_to_lua(lua)
     }
+    impl_box_push!();
 }
 
 impl LuaRead for String {
@@ -115,12 +135,14 @@ impl LuaPush for &CString {
         unsafe { sys::lua_pushstring(lua, self.as_ptr()) };
         1
     }
+    impl_box_push!();
 }
 
 impl LuaPush for CString {
     fn push_to_lua(self, lua: *mut lua_State) -> i32 {
         (&self).push_to_lua(lua)
     }
+    impl_box_push!();
 }
 
 impl LuaRead for CString {
@@ -145,6 +167,7 @@ impl<'s> LuaPush for &'s str {
             1
         }
     }
+    impl_box_push!();
 }
 
 impl LuaPush for bool {
@@ -152,6 +175,7 @@ impl LuaPush for bool {
         unsafe { sys::lua_pushboolean(lua, self.clone() as libc::c_int) };
         1
     }
+    impl_box_push!();
 }
 
 impl LuaPush for &bool {
@@ -159,6 +183,7 @@ impl LuaPush for &bool {
         unsafe { sys::lua_pushboolean(lua, self.clone() as libc::c_int) };
         1
     }
+    impl_box_push!();
 }
 
 impl LuaRead for bool {
@@ -176,6 +201,7 @@ impl LuaPush for () {
         unsafe { sys::lua_pushnil(lua) };
         1
     }
+    impl_box_push!();
 }
 
 impl LuaPush for &() {
@@ -183,6 +209,7 @@ impl LuaPush for &() {
         unsafe { sys::lua_pushnil(lua) };
         1
     }
+    impl_box_push!();
 }
 
 impl LuaRead for () {
@@ -196,6 +223,7 @@ impl LuaPush for &RawString {
         unsafe { sys::lua_pushlstring(lua, self.0.as_ptr() as *const i8, self.0.len()) };
         1
     }
+    impl_box_push!();
 }
 
 impl LuaPush for RawString {
@@ -203,6 +231,7 @@ impl LuaPush for RawString {
         unsafe { sys::lua_pushlstring(lua, self.0.as_ptr() as *const i8, self.0.len()) };
         1
     }
+    impl_box_push!();
 }
 
 impl LuaRead for RawString {
@@ -212,9 +241,13 @@ impl LuaRead for RawString {
         if c_str_raw.is_null() {
             return None;
         }
-
-        let value = unsafe { Vec::from_raw_parts(c_str_raw as *mut u8, size, size) };
-        Some(RawString(value))
+        
+        unsafe {
+            let mut dst: Vec<u8> = Vec::with_capacity(size);
+            ptr::copy(c_str_raw as *mut u8, dst.as_mut_ptr(), size);
+            dst.set_len(size);
+            Some(RawString(dst))
+        }
     }
 }
 
@@ -227,6 +260,14 @@ impl<T: LuaPush> LuaPush for Option<T> {
             1
         }
     }
+    impl_box_push!();
+}
+
+impl<T: LuaPush> LuaPush for Box<T> {
+    fn push_to_lua(self, lua: *mut lua_State) -> i32 {
+        (*self).push_to_lua(lua)
+    }
+    impl_box_push!();
 }
 
 impl<'a, T> LuaPush for &'a Option<T>
@@ -241,12 +282,16 @@ where
             1
         }
     }
+
+    impl_box_push!();
 }
 
 impl LuaPush for SocketAddr {
     fn push_to_lua(self, lua: *mut lua_State) -> i32 {
         format!("{}", self).push_to_lua(lua)
     }
+    
+    impl_box_push!();
 }
 
 impl<T: LuaRead> LuaRead for Option<T> {
@@ -271,6 +316,8 @@ impl<T: Serialize> LuaPush for WrapSerde<T> {
             return 0;
         }
     }
+    
+    impl_box_push!();
 }
 
 impl<'a, T: Deserialize<'a>> LuaRead for WrapSerde<T> {

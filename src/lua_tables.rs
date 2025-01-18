@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use libc;
 
-use crate::{lua_State, lua_pushvalue, sys, LuaPush, LuaRead};
+use crate::{impl_box_push, lua_State, lua_pushvalue, sys, LuaPush, LuaRead};
 
 /// Represents a table stored in the Lua context.
 ///
@@ -39,6 +39,8 @@ impl LuaPush for LuaTable {
             1
         }
     }
+
+    impl_box_push!();
 }
 
 impl Drop for LuaTable {

@@ -15,8 +15,8 @@ use log::error;
 use mem::MemLimit;
 pub use sys::*;
 
+pub use hclua_macro::{lua_module, ObjectMacro};
 pub use protocol::*;
-pub use hclua_macro::{ObjectMacro, lua_module};
 
 use lazy_static::lazy_static;
 use std::borrow::Borrow;
@@ -25,7 +25,6 @@ use std::ffi::{c_void, CStr, CString};
 use std::fs::File;
 use std::io::prelude::*;
 use std::sync::RwLock;
-
 
 pub mod functions;
 mod hotfix;
@@ -92,6 +91,16 @@ impl LuaGuard {
             size: size,
         }
     }
+}
+
+#[macro_export]
+macro_rules! impl_box_push {
+    () => {
+        fn box_push_to_lua(self: Box<Self>, lua: *mut lua_State) -> i32
+        {
+            (*self).push_to_lua(lua)
+        }
+    };
 }
 
 macro_rules! impl_exec_func {
@@ -346,8 +355,7 @@ impl Lua {
         self.query(index).unwrap()
     }
 
-    pub fn create_table(&mut self) -> LuaTable
-    {
+    pub fn create_table(&mut self) -> LuaTable {
         unsafe {
             lua_newtable(self.state());
             LuaRead::lua_read_with_pop(self.state(), -1, 1).unwrap()
@@ -586,10 +594,7 @@ impl Lua {
             #[cfg(not(any(feature = "lua53", feature = "lua54")))]
             {
                 let size = lua_getgs(lua) as usize;
-                EXTRA_DATA
-                    .write()
-                    .unwrap()
-                    .remove(&size);
+                EXTRA_DATA.write().unwrap().remove(&size);
             }
         }
     }
@@ -639,6 +644,12 @@ pub trait LuaPush {
     /// another implementation (for example `5.push_to_lua`) or by calling
     /// `userdata::push_userdata`.
     fn push_to_lua(self, lua: *mut lua_State) -> i32;
+
+    // fn box_push_to_lua(self: Box<Self>, lua: *mut lua_State) -> i32;
+    fn box_push_to_lua(self: Box<Self>, lua: *mut lua_State) -> i32 {
+        let _lua = lua;
+        unimplemented!()
+    }
 }
 
 /// Types that can be obtained from a Lua context.

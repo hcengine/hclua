@@ -129,14 +129,14 @@ pub fn object_macro_derive(input: TokenStream) -> TokenStream {
                 obj.create();
                 obj.static_def(name, param);
             }
-            
-            pub fn object_register(lua: &mut hclua::Lua, name: &str, 
+
+            pub fn object_register(lua: &mut hclua::Lua, name: &str,
                 func: extern "C" fn(*mut hclua::lua_State) -> libc::c_int)
             {
                 hclua::LuaObject::<#ident>::object_register(lua, name, func);
             }
-            
-            pub fn object_static_register(lua: &mut hclua::Lua, name: &str, 
+
+            pub fn object_static_register(lua: &mut hclua::Lua, name: &str,
                 func: extern "C" fn(*mut hclua::lua_State) -> libc::c_int)
             {
                 let mut obj = if #is_light {
@@ -188,6 +188,10 @@ pub fn object_macro_derive(input: TokenStream) -> TokenStream {
                     }
                     1
                 }
+            }
+            fn box_push_to_lua(self: Box<Self>, lua: *mut hclua::lua_State) -> i32
+            {
+                (*self).push_to_lua(lua)
             }
         }
     };

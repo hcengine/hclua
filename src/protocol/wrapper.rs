@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use libc;
 use std::hash::Hash;
 use hcproto::Value;
-use crate::{LuaPush, lua_State};
+use crate::{impl_box_push, lua_State, LuaPush};
 /// the wrapper for push to lua
 
 #[derive(PartialEq, Clone)]
@@ -60,6 +60,7 @@ impl LuaPush for LuaWrapperValue {
             }
         }
     }
+    impl_box_push!();
 }
 
 pub struct LuaWrapperVecValue(pub Vec<Value>);
@@ -71,6 +72,7 @@ impl LuaPush for LuaWrapperVecValue {
         }
         index
     }
+    impl_box_push!();
 }
 
 
@@ -87,4 +89,6 @@ impl LuaPush for LuaWrapperTableValue {
         }
         1
     }
+
+    impl_box_push!();
 }

@@ -1,11 +1,16 @@
 
-use crate::{LuaPush, LuaRead, sys};
+use crate::{LuaPush, LuaRead, sys, lua_State};
 
 macro_rules! tuple_impl {
     ($ty:ident) => (
         impl<$ty> LuaPush for ($ty,) where $ty: LuaPush {
             fn push_to_lua(self, lua: *mut sys::lua_State) -> i32 {
                 self.0.push_to_lua(lua)
+            }
+
+            fn box_push_to_lua(self: Box<Self>, lua: *mut lua_State) -> i32
+            {
+                (*self).push_to_lua(lua)
             }
         }
 
@@ -33,6 +38,11 @@ macro_rules! tuple_impl {
                         total
                     }
                 }
+            }
+
+            fn box_push_to_lua(self: Box<Self>, lua: *mut lua_State) -> i32
+            {
+                (*self).push_to_lua(lua)
             }
         }
 

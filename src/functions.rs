@@ -133,6 +133,10 @@ macro_rules! impl_function_ext {
                     1
                 }
             }
+            fn box_push_to_lua(self: Box<Self>, lua: *mut lua_State) -> i32
+            {
+                (*self).push_to_lua(lua)
+            }
         }
     );
 
@@ -164,6 +168,10 @@ macro_rules! impl_function_ext {
                     sys::lua_pushcclosure(lua, wrapper, 1);
                     1
                 }
+            }
+            fn box_push_to_lua(self: Box<Self>, lua: *mut lua_State) -> i32
+            {
+                (*self).push_to_lua(lua)
             }
         }
     )
