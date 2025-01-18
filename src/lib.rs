@@ -103,6 +103,30 @@ macro_rules! impl_box_push {
     };
 }
 
+
+#[macro_export]
+macro_rules! impl_obj_fn {
+    ($ty: ty, $lua: ident, $field: ident, $name: ident) => {
+        LuaObject::<$ty>::object_def(
+            $lua,
+            stringify!($name) ,
+            hclua::function1(|obj: &mut $ty| {
+                obj.$field.$name()
+            }),
+        );
+    };
+    ($ty: ty, $lua: ident, $field: ident, $name: ident, $part: ident) => {
+        LuaObject::<$ty>::object_def(
+            $lua,
+            stringify!($name) ,
+            hclua::function1(|obj: &mut $ty| {
+                obj.$field.$part.$name()
+            }),
+        );
+    };
+}
+
+
 macro_rules! impl_exec_func {
     ($name:ident, $($p:ident),*) => (
         #[allow(non_snake_case, unused_mut)]
