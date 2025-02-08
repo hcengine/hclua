@@ -7,9 +7,8 @@ use std::ptr;
 
 macro_rules! impl_function {
     ($name:ident, $($p:ident),*) => (
-/// Wraps a type that implements `FnMut` so that it can be used by hclua.
-///
-/// This is only needed because of a limitation in Rust's inferrence system.
+        /// Wraps a type that implements `FnMut` so that it can be used by hclua.
+        /// This is only needed because of a limitation in Rust's inferrence system.
         pub fn $name<Z, R $(, $p)*>(f: Z) -> Function<Z, ($($p,)*), R> where Z: FnMut($($p),*) -> R {
             Function {
                 function: f,
@@ -30,6 +29,32 @@ impl_function!(function7, A, B, C, D, E, F, G);
 impl_function!(function8, A, B, C, D, E, F, G, H);
 impl_function!(function9, A, B, C, D, E, F, G, H, I);
 impl_function!(function10, A, B, C, D, E, F, G, H, I, J);
+
+
+// macro_rules! impl_funok {
+//     ($name:ident, $($p:ident),*) => (
+//         /// Wraps a type that implements `FnMut` so that it can be used by hclua.
+//         /// This is only needed because of a limitation in Rust's inferrence system.
+//         pub fn $name<Z, R, EE: Debug $(, $p)*>(f: Z) -> Function<Z, ($($p,)*), Result<R, EE>> where Z: FnMut($($p),*) -> Result<R, EE> {
+//             Function {
+//                 function: f,
+//                 marker: PhantomData,
+//             }
+//         }
+//     )
+// }
+
+// impl_funok!(funok0,);
+// impl_funok!(funok1, A);
+// impl_funok!(funok2, A, B);
+// impl_funok!(funok3, A, B, C);
+// impl_funok!(funok4, A, B, C, D);
+// impl_funok!(funok5, A, B, C, D, E);
+// impl_funok!(funok6, A, B, C, D, E, F);
+// impl_funok!(funok7, A, B, C, D, E, F, G);
+// impl_funok!(funok8, A, B, C, D, E, F, G, H);
+// impl_funok!(funok9, A, B, C, D, E, F, G, H, I);
+// impl_funok!(funok10, A, B, C, D, E, F, G, H, I, J);
 
 /// Opaque type containing a Rust function or closure.
 pub struct Function<F, P, R> {

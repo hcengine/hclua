@@ -1,10 +1,15 @@
-use crate::{impl_box_push, lua_State, lua_pushnil, sys, LuaPush, LuaRead, LuaWrapperValue, ProtoLua, WrapSerde};
+use crate::{
+    impl_box_push, lua_State, lua_pushnil, sys, LuaPush, LuaRead, LuaWrapperValue, ProtoLua,
+    WrapSerde,
+};
 use hcproto::Value;
 use libc;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, ffi::CString, net::SocketAddr, ptr};
+use std::{collections::HashMap, ffi::CString, fmt::Debug, net::SocketAddr, ptr};
 
 pub struct RawString(pub Vec<u8>);
+
+pub struct WrapperObject<T>(pub T);
 
 macro_rules! integer_impl(
     ($t:ident) => (
@@ -241,7 +246,7 @@ impl LuaRead for RawString {
         if c_str_raw.is_null() {
             return None;
         }
-        
+
         unsafe {
             let mut dst: Vec<u8> = Vec::with_capacity(size);
             ptr::copy(c_str_raw as *mut u8, dst.as_mut_ptr(), size);
@@ -290,13 +295,25 @@ impl LuaPush for SocketAddr {
     fn push_to_lua(self, lua: *mut lua_State) -> i32 {
         format!("{}", self).push_to_lua(lua)
     }
-    
+
     impl_box_push!();
 }
 
 impl<T: LuaRead> LuaRead for Option<T> {
     fn lua_read_with_pop_impl(lua: *mut lua_State, index: i32, pop: i32) -> Option<Self> {
         Some(T::lua_read_with_pop_impl(lua, index, pop))
+    }
+}
+
+impl<T: LuaPush, E: Debug> LuaPush for Result<T, E> {
+    fn push_to_lua(self, lua: *mut lua_State) -> i32 {
+        match self {
+            Ok(t) => t.push_to_lua(lua),
+            Err(e) => {
+                crate::Lua::lua_error(lua, format!("序列化错误:{:?}", e));
+                unreachable!()
+            }
+        }
     }
 }
 
@@ -316,7 +333,7 @@ impl<T: Serialize> LuaPush for WrapSerde<T> {
             return 0;
         }
     }
-    
+
     impl_box_push!();
 }
 
@@ -330,6 +347,19 @@ impl<'a, T: Deserialize<'a>> LuaRead for WrapSerde<T> {
                 return None;
             }
             Ok(v) => return Some(WrapSerde::new(v)),
+        }
+    }
+}
+
+impl<'a, T: 'static> LuaRead for WrapperObject<T> {
+    fn lua_read_with_pop_impl(lua: *mut lua_State, index: i32, pop: i32) -> Option<Self> {
+        let obj: Option<&mut T> = crate::userdata::read_userdata(lua, index);
+        match obj {
+            Some(v) => unsafe {
+                let v = Box::from_raw(v);
+                Some(WrapperObject(*v))
+            },
+            None => None,
         }
     }
 }

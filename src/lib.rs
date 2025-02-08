@@ -45,7 +45,7 @@ pub use lua_tables::LuaTable;
 pub use module::LuaModule;
 pub use object::{LuaObject, WrapObject};
 pub use userdata::{push_lightuserdata, push_userdata, read_userdata};
-pub use values::RawString;
+pub use values::{RawString, WrapperObject};
 
 struct WrapCvoid(*mut libc::c_void);
 unsafe impl Send for WrapCvoid {}
