@@ -57,6 +57,10 @@ pub fn object_macro_derive(input: TokenStream) -> TokenStream {
                 }));
                 hclua::LuaObject::<#ident>::object_def(lua, &stringify!(#get_name), hclua::function1(#ident::#get_name));
                 hclua::LuaObject::<#ident>::object_def(lua, &stringify!(#set_name), hclua::function2(#ident::#set_name));
+                
+                #ident::object_static_def(lua, &stringify!(#get_name), hclua::function1(#ident::#get_name));
+                #ident::object_static_def(lua, &stringify!(#set_name), hclua::function2(#ident::#set_name));
+                
                 hclua::LuaObject::<#ident>::set_field(&stringify!(#field_ident));
             }
         } else {
@@ -158,7 +162,11 @@ pub fn object_macro_derive(input: TokenStream) -> TokenStream {
                 index: i32,
                 _pop: i32,
             ) -> Option<&'a mut #ident> {
-                hclua::userdata::read_userdata(lua, index)
+                if #is_light {
+                    hclua::userdata::read_wrapper_light_userdata(lua, index)
+                } else {
+                    hclua::userdata::read_userdata(lua, index)
+                }
             }
         }
 
@@ -168,25 +176,18 @@ pub fn object_macro_derive(input: TokenStream) -> TokenStream {
                 index: i32,
                 _pop: i32,
             ) -> Option<&'a #ident> {
-                hclua::userdata::read_userdata(lua, index).map(|v| &*v)
+                if #is_light {
+                    hclua::userdata::read_wrapper_light_userdata(lua, index).map(|v| &*v)
+                } else {
+                    hclua::userdata::read_userdata(lua, index).map(|v| &*v)
+                }
             }
         }
 
         impl hclua::LuaPush for #ident {
             fn push_to_lua(self, lua: *mut hclua::lua_State) -> i32 {
                 unsafe {
-                    let obj = std::boxed::Box::into_raw(std::boxed::Box::new(self));
-                    hclua::userdata::push_lightuserdata(&mut *obj, lua, |_| {});
-                    let typeid =
-                        std::ffi::CString::new(format!("{:?}", std::any::TypeId::of::<#ident>()))
-                            .unwrap();
-                    hclua::lua_getglobal(lua, typeid.as_ptr());
-                    if hclua::lua_istable(lua, -1) {
-                        hclua::lua_setmetatable(lua, -2);
-                    } else {
-                        hclua::lua_pop(lua, 1);
-                    }
-                    1
+                    hclua::userdata::push_wrapper_lightuserdata(self, lua, |_| {})
                 }
             }
             fn box_push_to_lua(self: Box<Self>, lua: *mut hclua::lua_State) -> i32

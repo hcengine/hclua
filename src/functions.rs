@@ -87,12 +87,11 @@ macro_rules! impl_wrapper {
             }
 
             let args = match LuaRead::lua_read_at_position(lua, -arguments_count as libc::c_int) {
-                // TODO: what if the user has the wrong params?
                 Some(a) => a,
                 _ => {
                     let err_msg = format!(
                         "wrong parameter types for callback function arguments_count \
-                                        is {} all have num {}",
+                                        is {} all have num {} may type not match",
                         arguments_count, $num
                     );
                     err_msg.push_to_lua(lua);

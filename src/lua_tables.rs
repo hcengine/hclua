@@ -173,6 +173,7 @@ impl LuaTable {
         if result == 0 {
             unsafe {
                 sys::lua_newtable(self.table);
+                
                 sys::lua_setmetatable(self.table, -2);
                 let r = sys::lua_getmetatable(self.table, self.index);
                 assert!(r != 0);

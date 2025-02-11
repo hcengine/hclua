@@ -3,7 +3,6 @@ use hclua::{Lua, LuaTable};
 
 #[hclua::lua_module(name="rust_core")]
 fn rust_module(lua: &mut Lua) -> Option<LuaTable> {
-    println!("xxxxxxxxxxxw1");
     let mut table = lua.create_table();
     table.set("id", 1);
     Some(table)

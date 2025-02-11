@@ -1,7 +1,9 @@
-use std::any::{Any, TypeId};
+use std::any::{type_name, Any};
+use std::ffi::CString;
 use std::mem;
 use std::ptr;
 
+use crate::object::LightObject;
 use crate::{sys, LuaPush, LuaRead, LuaTable};
 
 // Called when an object inside Lua is being dropped.
@@ -31,29 +33,25 @@ where
     F: FnMut(LuaTable),
     T: 'a + Any,
 {
-    let typeid = format!("{:?}", TypeId::of::<T>());
-    let lua_data_raw =
-        unsafe { sys::lua_newuserdata(lua, mem::size_of::<T>() as libc::size_t) };
+    let lua_data_raw = unsafe { sys::lua_newuserdata(lua, mem::size_of::<T>() as libc::size_t) };
 
     // creating a metatable
     unsafe {
-        ptr::write(lua_data_raw as *mut _, data);
-
+        let typeid = std::ffi::CString::new(type_name::<T>()).unwrap();
+        sys::lua_getglobal(lua, typeid.as_ptr());
+        if sys::lua_istable(lua, -1) {
+            sys::lua_setmetatable(lua, -2);
+            return 1;
+        } else {
+            sys::lua_pop(lua, 1);
+        }
         sys::lua_newtable(lua);
 
+        let typeid = type_name::<T>();
         // index "__typeid" corresponds to the hash of the TypeId of T
         "__typeid".push_to_lua(lua);
         typeid.push_to_lua(lua);
         sys::lua_settable(lua, -3);
-
-        // index "__gc" call the object's destructor
-        {
-            "__gc".push_to_lua(lua);
-
-            sys::lua_pushcfunction(lua, destructor_wrapper::<T>);
-
-            sys::lua_settable(lua, -3);
-        }
 
         // calling the metatable closure
         {
@@ -62,7 +60,6 @@ where
 
         sys::lua_setmetatable(lua, -2);
     }
-
     1
 }
 
@@ -87,15 +84,23 @@ where
     F: FnMut(LuaTable),
     T: 'a + Any,
 {
-    let typeid = format!("{:?}", TypeId::of::<T>());
     unsafe {
         sys::lua_pushlightuserdata(lua, mem::transmute(data));
     };
 
     // creating a metatable
     unsafe {
+        let typeid = std::ffi::CString::new(type_name::<T>()).unwrap();
+        sys::lua_getglobal(lua, typeid.as_ptr());
+        if sys::lua_istable(lua, -1) {
+            sys::lua_setmetatable(lua, -2);
+            return 1;
+        } else {
+            sys::lua_pop(lua, 1);
+        }
         sys::lua_newtable(lua);
 
+        let typeid = type_name::<T>();
         // index "__typeid" corresponds to the hash of the TypeId of T
         "__typeid".push_to_lua(lua);
         typeid.push_to_lua(lua);
@@ -112,13 +117,36 @@ where
     1
 }
 
+pub fn push_wrapper_lightuserdata<'a, T, F>(
+    data: T,
+    lua: *mut sys::lua_State,
+    mut metatable: F,
+) -> i32
+where
+    F: FnMut(LuaTable),
+    T: 'a + Any,
+{
+    let lo = LightObject::new(data);
+    let lua_data_raw =
+        unsafe { sys::lua_newuserdata(lua, mem::size_of::<LightObject>() as libc::size_t) };
+    unsafe {
+        ptr::write(lua_data_raw as *mut _, lo);
+    }
+    let typeid = type_name::<T>();
+    let cs = CString::new(typeid).unwrap();
+    unsafe {
+        sys::lua_getglobal(lua, cs.as_ptr());
+        sys::lua_setmetatable(lua, -2);
+    }
+    1
+}
 ///
 pub fn read_userdata<'t, 'c, T>(lua: *mut sys::lua_State, index: i32) -> Option<&'t mut T>
 where
     T: 'static + Any,
 {
     unsafe {
-        let expected_typeid = format!("{:?}", TypeId::of::<T>());
+        let expected_typeid = type_name::<T>();
         if sys::lua_isuserdata(lua, index) == 0 {
             return None;
         }
@@ -129,7 +157,7 @@ where
         if sys::lua_getmetatable(lua, index) == 0 {
             return None;
         }
-        
+
         "__typeid".push_to_lua(lua);
         sys::lua_gettable(lua, -2);
         match <String as LuaRead>::lua_read(lua) {
@@ -141,5 +169,26 @@ where
         }
         sys::lua_pop(lua, 2);
         Some(mem::transmute(data_ptr))
+    }
+}
+
+pub fn read_wrapper_light_userdata<'t, 'c, T>(lua: *mut sys::lua_State, index: i32) -> Option<&'t mut T>
+where
+    T: 'static + Any,
+{
+    unsafe {
+        let expected_typeid = type_name::<T>();
+        if sys::lua_isuserdata(lua, index) == 0 {
+            return None;
+        }
+        let data_ptr = sys::lua_touserdata(lua, index);
+        if data_ptr.is_null() {
+            return None;
+        }
+        let obj: &mut LightObject = mem::transmute(data_ptr);
+        if obj.name != expected_typeid {
+            return None;
+        }
+        Some(mem::transmute(obj.ptr))
     }
 }

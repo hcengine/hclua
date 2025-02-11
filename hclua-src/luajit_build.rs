@@ -256,7 +256,6 @@ impl Build {
     }
 
     fn run_command(&self, mut command: Command, desc: &str) {
-        println!("running {:?}", command);
         let status = command.status().unwrap();
         if !status.success() {
             panic!(

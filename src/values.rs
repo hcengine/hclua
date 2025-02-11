@@ -352,8 +352,10 @@ impl<'a, T: Deserialize<'a>> LuaRead for WrapSerde<T> {
 }
 
 impl<'a, T: 'static> LuaRead for WrapperObject<T> {
-    fn lua_read_with_pop_impl(lua: *mut lua_State, index: i32, pop: i32) -> Option<Self> {
-        let obj: Option<&mut T> = crate::userdata::read_userdata(lua, index);
+    fn lua_read_with_pop_impl(lua: *mut lua_State, index: i32, _pop: i32) -> Option<Self> {
+        println!("aaaaaaa WrapperObject aaaaaaaaa");
+        let obj: Option<&mut T> = crate::userdata::read_wrapper_light_userdata(lua, index);
+        println!("bbbbbbb WrapperObject bbbbbbbb");
         match obj {
             Some(v) => unsafe {
                 let v = Box::from_raw(v);

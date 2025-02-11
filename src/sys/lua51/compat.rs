@@ -525,6 +525,7 @@ pub unsafe fn luaL_tolstring(L: *mut lua_State, mut idx: c_int, len: *mut usize)
 pub unsafe fn luaL_setmetatable(L: *mut lua_State, tname: *const c_char) {
     luaL_checkstack(L, 1, cstr!("not enough stack slots"));
     luaL_getmetatable(L, tname);
+    println!("set meta 88888888888888");
     lua_setmetatable(L, -2);
 }
 

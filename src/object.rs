@@ -1,6 +1,10 @@
 use lazy_static::lazy_static;
 use libc::c_char;
+use std::any::type_name;
 use std::collections::HashSet;
+use std::ffi::CStr;
+use std::mem::size_of;
+use std::os::raw::c_void;
 use std::{
     any::{Any, TypeId},
     ffi::CString,
@@ -11,11 +15,27 @@ use std::{
 
 use crate::{
     luaL_error, lua_State, lua_call, lua_error, lua_getfield, lua_gettop, lua_pushvalue,
-    push_lightuserdata, sys, Lua, LuaPush, LuaRead, LuaTable,
+    push_lightuserdata, sys, Lua, LuaPush, LuaRead, LuaTable, WrapCvoid,
 };
 
 lazy_static! {
-    static ref FIELD_CHECK: RwLock<HashSet<(TypeId, &'static str)>> = RwLock::new(HashSet::new());
+    static ref FIELD_CHECK: RwLock<HashSet<(&'static str, &'static str)>> = RwLock::new(HashSet::new());
+}
+
+pub struct LightObject {
+    pub ptr: *mut c_void,
+    pub name: &'static str,
+}
+
+impl LightObject {
+    pub fn new<T>(val: T) -> Self {
+        unsafe {
+            LightObject {
+                ptr: Box::into_raw(Box::new(val)) as *mut c_void,
+                name: type_name::<T>(),
+            }
+        }
+    }
 }
 
 pub struct LuaObject<'a, T>
@@ -36,20 +56,20 @@ where
 {
     pub fn is_field(name: &str) -> bool {
         let val = FIELD_CHECK.read().unwrap();
-        val.contains(&(TypeId::of::<T>(), name))
+        val.contains(&(type_name::<T>(), name))
     }
 
     pub fn set_field(name: &'static str) {
         let mut val = FIELD_CHECK.write().unwrap();
-        val.insert((TypeId::of::<T>(), name));
+        val.insert((type_name::<T>(), name));
     }
 
     fn get_metatable_base_key() -> CString {
-        CString::new(format!("{:?}", TypeId::of::<T>())).unwrap()
+        CString::new(type_name::<T>()).unwrap()
     }
 
     fn get_metatable_real_key() -> CString {
-        CString::new(format!("{:?}_real", TypeId::of::<T>())).unwrap()
+        CString::new(format!("{:?}_real", type_name::<T>())).unwrap()
     }
 
     fn get_set_field_key(name: &str) -> CString {
@@ -121,7 +141,7 @@ where
         unsafe {
             ptr::write(lua_data_raw as *mut _, t);
         }
-        let typeid = CString::new(format!("{:?}", TypeId::of::<T>())).unwrap();
+        let typeid = CString::new(type_name::<T>()).unwrap();
         unsafe {
             sys::lua_getglobal(lua, typeid.as_ptr());
             sys::lua_setmetatable(lua, -2);
@@ -133,15 +153,8 @@ where
     // in rust we alloc the memory, avoid copy the memory
     // in lua we get the object, we must free the memory
     extern "C" fn constructor_light_wrapper(lua: *mut sys::lua_State) -> libc::c_int {
-        let t = Box::into_raw(Box::new(T::default()));
-        push_lightuserdata(unsafe { &mut *t }, lua, |_| {});
-
-        let typeid = Self::get_metatable_base_key();
-        unsafe {
-            sys::lua_getglobal(lua, typeid.as_ptr());
-            sys::lua_setmetatable(lua, -2);
-        }
-        1
+        // let t = Box::into_raw(Box::new(T::default()));
+        crate::userdata::push_wrapper_lightuserdata(T::default(), lua, |_| {})
     }
 
     #[inline]
@@ -404,40 +417,6 @@ macro_rules! add_object_field {
             }),
         );
         $userdata.mark_field(stringify!($name));
-    };
-}
-
-#[macro_export]
-macro_rules! object_impl {
-    ($t: ty) => {
-        impl<'a> LuaRead for &'a mut $t {
-            fn lua_read_with_pop_impl(
-                lua: *mut lua_State,
-                index: i32,
-                _pop: i32,
-            ) -> Option<&'a mut $t> {
-                hclua::userdata::read_userdata(lua, index)
-            }
-        }
-
-        impl LuaPush for $t {
-            fn push_to_lua(self, lua: *mut lua_State) -> i32 {
-                unsafe {
-                    let obj = std::boxed::Box::into_raw(std::boxed::Box::new(self));
-                    hclua::userdata::push_lightuserdata(&mut *obj, lua, |_| {});
-                    let typeid =
-                        std::ffi::CString::new(format!("{:?}", std::any::TypeId::of::<$t>()))
-                            .unwrap();
-                    hclua::lua_getglobal(lua, typeid.as_ptr());
-                    if hclua::lua_istable(lua, -1) {
-                        hclua::lua_setmetatable(lua, -2);
-                    } else {
-                        hclua::lua_pop(lua, 1);
-                    }
-                    1
-                }
-            }
-        }
     };
 }
 
