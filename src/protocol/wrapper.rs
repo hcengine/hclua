@@ -17,8 +17,6 @@ impl Hash for LuaWrapperValue {
     }
 }
 
-
-
 impl LuaPush for LuaWrapperValue {
     fn push_to_lua(self, lua: *mut lua_State) -> i32 {
         match self.0 {

@@ -15,7 +15,7 @@ pub fn object_macro_derive(input: TokenStream) -> TokenStream {
         ..
     } = parse_macro_input!(input);
     let config = config::Config::parse_from_attributes(ident.to_string(), &attrs[..]).unwrap();
-    let functions: Vec<_> = fields
+    let mut functions: Vec<_> = fields
         .iter()
         .map(|field| {
             let field_ident = field.ident.clone().unwrap();
@@ -42,7 +42,7 @@ pub fn object_macro_derive(input: TokenStream) -> TokenStream {
         })
         .collect();
 
-    let registers: Vec<_> = fields.iter().map(|field| {
+    let mut registers: Vec<_> = fields.iter().map(|field| {
         let field_ident = field.ident.clone().unwrap();
         if field.attrs.iter().all(|attr| !attr.path().is_ident("hclua_skip")) {
             let ty = field.ty.clone();
@@ -68,6 +68,24 @@ pub fn object_macro_derive(input: TokenStream) -> TokenStream {
         }
     }).collect();
 
+    let name = config.name;
+    let is_light = config.light;
+
+    functions.push({
+        quote! {
+            pub fn is_type(&mut self, t: String) -> bool {
+                t == #name
+            }
+        }
+    });
+
+    registers.push({
+        let is_type = format_ident!("is_type");
+        quote!{
+            hclua::LuaObject::<#ident>::add_object_method_get(lua, "is_type", hclua::function2(#ident::#is_type));
+        }
+    });
+
     let create_from_table: Vec<_> = fields
         .iter()
         .map(|field| {
@@ -91,8 +109,6 @@ pub fn object_macro_derive(input: TokenStream) -> TokenStream {
         })
         .collect();
 
-    let name = config.name;
-    let is_light = config.light;
     let gen = quote! {
         impl #ident {
             pub fn register_field(lua: &mut hclua::Lua) {
