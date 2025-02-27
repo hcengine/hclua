@@ -192,3 +192,28 @@ where
         Some(mem::transmute(obj.ptr))
     }
 }
+
+
+pub fn read_pop_wrapper_light_userdata<'t, 'c, T>(lua: *mut sys::lua_State, index: i32) -> Option<T>
+where
+    T: 'static + Any,
+{
+    unsafe {
+        let expected_typeid = type_name::<T>();
+        if sys::lua_isuserdata(lua, index) == 0 {
+            return None;
+        }
+        let data_ptr = sys::lua_touserdata(lua, index);
+        if data_ptr.is_null() {
+            return None;
+        }
+        let obj: &mut LightObject = mem::transmute(data_ptr);
+        if obj.name != expected_typeid || obj.ptr.is_null() {
+            return None;
+        }
+        let val: &mut T = mem::transmute(obj.ptr);
+        let val = Box::from_raw(val);
+        obj.ptr = ptr::null_mut() as *mut libc::c_void;
+        Some(*val)
+    }
+}

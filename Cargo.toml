@@ -17,7 +17,7 @@ log="0.4.22"
 # hcproto = { version = "0.1.5" }
 # algorithm = { version = "^0.1.6"}
 hcproto = { path = "../hcproto/Rust" }
-algorithm = { path = "../algorithm", version = "0.1.5"}
+algorithm = { path = "../algorithm", version = "^0.1.18"}
 serde = { version = "1.0", features = ["derive"] }
 
 ffi = { package = "hclua-src", version = "0.1.1", path = "hclua-src" }

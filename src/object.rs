@@ -158,12 +158,62 @@ where
     }
 
     #[inline]
-    extern "C" fn destructor_light_wrapper(lua: *mut sys::lua_State) -> libc::c_int
+    extern "C" fn delete_light_wrapper(lua: *mut sys::lua_State) -> libc::c_int
     where
         &'a mut T: LuaRead,
     {
-        let msg: &mut T = unwrap_or!(crate::LuaRead::lua_read_at_position(lua, 1), return 0);
-        let _msg = unsafe { Box::from_raw(msg) };
+        unsafe {
+            if sys::lua_isuserdata(lua, 1) == 0 {
+                return 0;
+            }
+            let data_ptr = sys::lua_touserdata(lua, 1);
+            if data_ptr.is_null() {
+                return 0;
+            }
+            let expected_typeid = type_name::<T>();
+            let obj: &mut LightObject = std::mem::transmute(data_ptr);
+            if obj.name != expected_typeid || obj.ptr.is_null() {
+                return 0;
+            }
+            let val: &mut T = mem::transmute(obj.ptr);
+            let _val = Box::from_raw(val);
+            obj.ptr = ptr::null_mut() as *mut c_void;
+        }
+        0
+    }
+
+    
+    #[inline]
+    extern "C" fn destructor_light_gc(lua: *mut sys::lua_State) -> libc::c_int
+    where
+        &'a mut T: LuaRead,
+    {
+        println!("destructor_light_wrapper aaaaa {:?}", type_name::<T>());
+        // let msg: &mut T = unwrap_or!(crate::LuaRead::lua_read_at_position(lua, 1), return 0);
+        // println!("destructor_light_wrapper bbbbbbbbbb");
+        // let _msg = unsafe { Box::from_raw(msg) };
+        unsafe {
+            if sys::lua_isuserdata(lua, 1) == 0 {
+                return 0;
+            }
+            let data_ptr = sys::lua_touserdata(lua, 1);
+            if data_ptr.is_null() {
+                return 0;
+            }
+            
+            loop {
+                let expected_typeid = type_name::<T>();
+                let obj: &mut LightObject = std::mem::transmute(data_ptr);
+                if obj.name != expected_typeid || obj.ptr.is_null() {
+                    break;
+                }
+                let val: &mut T = mem::transmute(obj.ptr);
+                let _val = Box::from_raw(val);
+                break;
+            }
+            ptr::drop_in_place(data_ptr as *mut LightObject);
+        }
+        println!("destructor_light_wrapper bbbbbbbbbb");
         0
     }
 
@@ -173,6 +223,7 @@ where
             "usedata object must not del, beacuse it belong to lua gc".push_to_lua(lua);
             lua_error(lua)
         }
+        0
     }
 
     #[inline]
@@ -184,6 +235,7 @@ where
         }
     }
 
+    
     pub fn new(lua: *mut lua_State, name: &'static str) -> LuaObject<'a, T> {
         LuaObject {
             lua,
@@ -220,6 +272,10 @@ where
 
                     sys::lua_pushcfunction(self.lua, Self::destructor_wrapper);
 
+                    sys::lua_settable(self.lua, -3);
+                } else {
+                    "__gc".push_to_lua(self.lua);
+                    sys::lua_pushcfunction(self.lua, Self::destructor_light_gc);
                     sys::lua_settable(self.lua, -3);
                 }
 
@@ -259,7 +315,7 @@ where
 
                 "del".push_to_lua(self.lua);
                 if self.light {
-                    sys::lua_pushcfunction(self.lua, Self::destructor_light_wrapper);
+                    sys::lua_pushcfunction(self.lua, Self::delete_light_wrapper);
                 } else {
                     sys::lua_pushcfunction(self.lua, Self::destructor_bad_wrapper);
                 }
